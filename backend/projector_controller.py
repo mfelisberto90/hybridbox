@@ -849,7 +849,11 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {{
             r"(?:mDisplays=\[|displays=\[|,\s*|^|\n)\s*([^\r\n,]+?)\s*\(([0-9a-fA-F:]{17})\)\s*,\s*isAvailable\s*(true|false)",
             out,
         ):
-            name = re.sub(r"^(?:mDisplays=\[|displays=\[|\s)+", "", m.group(1)).strip()
+            name = re.sub(
+                r"^(?:mDisplays=\[|displays=\[|activeDisplay=|\s)+", "", m.group(1)
+            ).strip()
+            if not name:
+                continue
             mac = m.group(2).lower()
             avail = m.group(3) == "true"
             is_proj = any(k in name.lower() for k in PROJECTOR_KEYWORDS)
@@ -908,7 +912,11 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {{
             r"Device:\s*([^\r\n]+)\s*[\r\n]+\s*deviceAddress:\s*([0-9a-fA-F:]{17})",
             out,
         ):
-            name = re.sub(r"^(?:mDisplays=\[|displays=\[|\s)+", "", m.group(1)).strip()
+            name = re.sub(
+                r"^(?:mDisplays=\[|displays=\[|activeDisplay=|\s)+", "", m.group(1)
+            ).strip()
+            if not name:
+                continue
             mac = m.group(2).lower()
             is_proj = any(k in name.lower() for k in PROJECTOR_KEYWORDS)
             disp_name = "Projector" if is_proj else name
