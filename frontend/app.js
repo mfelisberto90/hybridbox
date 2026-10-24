@@ -1209,6 +1209,7 @@
 
   const projectorStatusBanner = document.getElementById("projectorStatusBanner");
   const btnScanProjector = document.getElementById("btnScanProjector");
+  const btnDisconnectProjector = document.getElementById("btnDisconnectProjector");
   const btnUseHdmiCable = document.getElementById("btnUseHdmiCable");
   const btnWakePhoneScreen = document.getElementById("btnWakePhoneScreen");
   const btnLocateProjectorIp = document.getElementById("btnLocateProjectorIp");
@@ -1282,6 +1283,38 @@
     return `<span class="wifi-signal-bars ${levelClass}" title="Signal ${p}%"><i class="wifi-bar b1 ${b1}"></i><i class="wifi-bar b2 ${b2}"></i><i class="wifi-bar b3 ${b3}"></i><i class="wifi-bar b4 ${b4}"></i></span>`;
   }
 
+  async function disconnectProjector() {
+    vibrate(18);
+    if (btnDisconnectProjector) {
+      btnDisconnectProjector.disabled = true;
+      btnDisconnectProjector.textContent = "⏳ Disconnecting TV / Projector...";
+    }
+    if (projectorStatusBanner) {
+      projectorStatusBanner.innerHTML =
+        "🔌 Disconnecting wireless projection and returning video to the phone / PC screen...";
+    }
+    try {
+      const res = await fetch("/api/projector/disconnect", { method: "POST" });
+      const data = await res.json();
+      if (projectorStatusBanner) {
+        projectorStatusBanner.innerHTML =
+          data.message || "🔌 Disconnected from TV / Projector!";
+      }
+      if (Array.isArray(data.devices)) {
+        renderProjectorDevices(data.devices);
+      }
+    } catch (_) {
+      if (projectorStatusBanner) {
+        projectorStatusBanner.textContent = "Error disconnecting from TV / Projector.";
+      }
+    } finally {
+      if (btnDisconnectProjector) {
+        btnDisconnectProjector.disabled = false;
+        btnDisconnectProjector.textContent = "🔴 Disconnect TV / Projector";
+      }
+    }
+  }
+
   function renderProjectorDevices(devices) {
     if (!projectorDevicesList) return;
     projectorDevicesList.innerHTML = "";
@@ -1306,7 +1339,6 @@
       const badgeHtml = isConn
         ? '<span style="color:#4ade80;font-weight:700;font-size:0.75rem;">🟢 CONNECTED</span>'
         : '<span style="color:#38bdf8;font-weight:600;font-size:0.75rem;">📡 READY TO CONNECT</span>';
-      const btnLabel = isConn ? "🪞 Mirror" : "Connect";
       const safeName = escapeHtml(dev.name);
       const safeProto = escapeHtml(dev.protocol || "Miracast / Cast");
       const safeAddr = escapeHtml(dev.address || "");
@@ -1315,12 +1347,23 @@
           <span class="projector-device-name">📽️ ${safeName}${favBadge} ${badgeHtml}</span>
           <span class="projector-device-meta">${safeProto}${safeAddr ? " • " + safeAddr : ""}</span>
         </div>
-        <button type="button" class="projector-connect-btn">${btnLabel}</button>
+        <div class="projector-card-actions">
+          ${
+            isConn
+              ? '<button type="button" class="projector-connect-btn disconnect-btn">🔌 Disconnect</button>'
+              : '<button type="button" class="projector-connect-btn">Connect</button>'
+          }
+        </div>
       `;
-      const connectBtn = card.querySelector(".projector-connect-btn");
-      connectBtn.addEventListener("click", async () => {
+      const actionBtn = card.querySelector(".projector-connect-btn");
+      actionBtn.addEventListener("click", async () => {
+        if (isConn) {
+          actionBtn.textContent = "Disconnecting...";
+          await disconnectProjector();
+          return;
+        }
         vibrate(15);
-        connectBtn.textContent = "Connecting...";
+        actionBtn.textContent = "Connecting...";
         try {
           const res = await fetch("/api/projector/connect", {
             method: "POST",
@@ -1338,7 +1381,7 @@
         } catch (_) {
           projectorStatusBanner.textContent = "Error connecting to TV/Projector.";
         } finally {
-          connectBtn.textContent = btnLabel;
+          actionBtn.textContent = "Connect";
         }
       });
       projectorDevicesList.appendChild(card);
@@ -1735,6 +1778,9 @@
   }
   if (btnScanProjector) {
     btnScanProjector.addEventListener("click", () => scanAndConnectProjector(true));
+  }
+  if (btnDisconnectProjector) {
+    btnDisconnectProjector.addEventListener("click", () => disconnectProjector());
   }
   if (btnUseHdmiCable) {
     btnUseHdmiCable.addEventListener("click", async () => {

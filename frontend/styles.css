@@ -1172,6 +1172,13 @@ body {
   font-size: 11px;
 }
 
+.proj-btn.danger-btn {
+  background: linear-gradient(135deg, #e11d48, #9f1239);
+  border-color: rgba(251, 113, 133, 0.55);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+}
+
 .projector-list-header {
   font-size: 12px;
   font-weight: 700;
@@ -1286,6 +1293,18 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
   cursor: pointer;
+}
+
+.projector-connect-btn.disconnect-btn {
+  border-color: rgba(251, 113, 133, 0.55);
+  background: linear-gradient(135deg, #e11d48, #be123c);
+}
+
+.projector-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .hidden {

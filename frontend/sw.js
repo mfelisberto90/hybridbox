@@ -1,9 +1,9 @@
-const CACHE_NAME = "hybridbox-pwa-v24";
+const CACHE_NAME = "hybridbox-pwa-v25";
 const ASSETS = [
   "/",
   "/manifest.json",
-  "/static/styles.css?v=24",
-  "/static/app.js?v=24",
+  "/static/styles.css?v=25",
+  "/static/app.js?v=25",
   "/static/icons/icon.svg",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",

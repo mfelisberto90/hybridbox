@@ -682,6 +682,9 @@ class ProjectorController:
                     "devices": status.get("miracast_devices", []),
                 }
 
+        if mode_clean == "internal":
+            return self.disconnect_device()
+
         flag, msg = mode_map[mode_clean]
         if os.name == "nt":
             self._run_on_visible_desktop(f"DisplaySwitch.exe {flag}")
@@ -693,6 +696,67 @@ class ProjectorController:
             "message": msg,
             "active_display": status.get("active_display"),
             "devices": status.get("miracast_devices", []),
+        }
+
+    def disconnect_device(self) -> Dict[str, Any]:
+        """
+        Desconecta universalmente qualquer projeção ativa (Miracast / Wireless Display / Cast no Android
+        e também projeção sem fio do Windows Laptop), retornando o vídeo para a tela local:
+        1. Alterna `wifi_display_on 0 -> 1` no Android (`WifiDisplayController.requestDisconnect()`)
+           para encerrar imediatamente qualquer sessão Miracast/Wi-Fi Direct sem tocar na tela;
+        2. Caso alguma rota Cast continue ativa na UI, fecha/desconecta via `CAST_SETTINGS`;
+        3. No Windows, executa `DisplaySwitch.exe /internal` e retorna o celular para o Launcher.
+        """
+        self.wake_phone_screen(bring_to_front=False)
+
+        # 1. Desconexão instantânea no kernel/system_server do Android via wifi_display_on 0 -> 1
+        self._run_adb(
+            "settings put global wifi_display_on 0 2>/dev/null; "
+            "sleep 0.5; "
+            "settings put global wifi_display_on 1 2>/dev/null; "
+            "am force-stop com.android.settings 2>/dev/null",
+            timeout=3.5,
+        )
+
+        # 2. Se também estiver rodando no Windows, desconecta a projeção do PC (/internal)
+        if os.name == "nt":
+            self._run_on_visible_desktop("DisplaySwitch.exe /internal")
+
+        time.sleep(0.6)
+        chk = self._run_adb(
+            "dumpsys display 2>/dev/null | grep -E 'mCurrentStatus=|mRemoteDisplayConnected='",
+            timeout=2.0,
+        )
+        # Fallback de UI caso o driver mantenha a sessão aberta após o toggle
+        if "activeDisplayState=2" in chk or "mRemoteDisplayConnected=true" in chk:
+            self._run_adb(
+                "am start --user 0 -a android.settings.CAST_SETTINGS >/dev/null 2>&1",
+                timeout=2.5,
+            )
+            time.sleep(1.0)
+            items = self._get_cast_screen_items(skip_focus_check=True, auto_dismiss_modal=True)
+            conn_item = next(
+                (it for it in items if it.get("connected") or it.get("is_connecting")),
+                None,
+            )
+            if conn_item and "tap_x" in conn_item and "tap_y" in conn_item:
+                self._safe_tap(int(conn_item["tap_x"]), int(conn_item["tap_y"]))
+                time.sleep(0.6)
+                self._get_cast_screen_items(skip_focus_check=True, auto_dismiss_modal=True)
+                time.sleep(0.5)
+
+        self._run_adb(
+            "am start --user 0 -n com.spocky.projengmenu/.ui.home.MainActivity >/dev/null 2>&1",
+            timeout=2.5,
+        )
+        status = self.parse_miracast_status(deep_scan_ip=False)
+        return {
+            "ok": True,
+            "disconnected": True,
+            "mode": "internal",
+            "active_display": status.get("active_display"),
+            "devices": status.get("miracast_devices", []),
+            "message": "🔌 Disconnected from TV / Projector! Video returned to the phone / PC screen.",
         }
 
     def _auto_click_windows_cast_target(self, target_name: str = "PROJECTOR") -> None:

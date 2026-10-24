@@ -377,6 +377,19 @@ class TestHybridBoxSuite(unittest.TestCase):
             self.assertTrue(dismissed)
             mock_tap.assert_called_once_with(540, 2060)
 
+        # 3. Universal Disconnect: toggles wifi_display_on 0 -> 1 and returns disconnected=True
+        with mock.patch.object(proj, "wake_phone_screen"), \
+             mock.patch.object(proj, "_run_adb", return_value="activeDisplayState=0\n") as mock_adb, \
+             mock.patch.object(proj, "_run_on_visible_desktop"), \
+             mock.patch.object(proj, "parse_miracast_status", return_value={"active_display": None, "miracast_devices": []}):
+            res_disc = proj.disconnect_device()
+            self.assertTrue(res_disc["ok"])
+            self.assertTrue(res_disc["disconnected"])
+            self.assertEqual(res_disc["mode"], "internal")
+            adb_cmds = " ".join(str(c[0][0]) for c in mock_adb.call_args_list)
+            self.assertIn("settings put global wifi_display_on 0", adb_cmds)
+            self.assertIn("settings put global wifi_display_on 1", adb_cmds)
+
 
 if __name__ == "__main__":
     unittest.main()

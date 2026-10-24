@@ -444,6 +444,12 @@ async def api_projector_connect(req: ProjectorConnectRequest) -> JSONResponse:
     return JSONResponse(res)
 
 
+@app.post("/api/projector/disconnect")
+async def api_projector_disconnect() -> JSONResponse:
+    res = await asyncio.to_thread(state.projector.disconnect_device)
+    return JSONResponse(res)
+
+
 @app.post("/api/projector/display-mode")
 async def api_projector_display_mode(req: ProjectorDisplayModeRequest) -> JSONResponse:
     res = await asyncio.to_thread(state.projector.set_windows_display_mode, req.mode)
