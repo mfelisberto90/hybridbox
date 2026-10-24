@@ -10,17 +10,20 @@ Automated test suite for HybridBox Remote PWA:
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
 from backend.android_controller import AndroidController
 from backend.app_registry import ANDROID_APPS, LINUX_APPS, get_all_apps
 from backend.projector_controller import PROJECTOR_KEYWORDS, ProjectorController
 from backend.ssh_terminal_controller import SshTerminalController
-
-BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class TestHybridBoxSuite(unittest.TestCase):
@@ -301,6 +304,78 @@ class TestHybridBoxSuite(unittest.TestCase):
             if m:
                 leaks.append(f"{rel}: {m.group(0)}")
         self.assertEqual(leaks, [], f"Personal data leaked in tracked files: {leaks}")
+
+    def test_universal_miracast_disambiguation_and_modal_recovery(self) -> None:
+        fake_android = mock.MagicMock()
+        fake_android.ssh_host = "hybridbox.local"
+        fake_android.ssh_user = "termux"
+        proj = ProjectorController(fake_android)
+
+        # 1. XML with duplicate entries: Chromecast (enabled), Unavailable (disabled), Wireless display (enabled)
+        sample_xml = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+        <hierarchy rotation="0">
+          <node class="androidx.recyclerview.widget.RecyclerView" resource-id="com.android.settings:id/recycler_view" bounds="[0,393][1080,2134]">
+            <node class="android.widget.LinearLayout" clickable="true" enabled="true" bounds="[0,675][1080,888]">
+              <node class="android.widget.RelativeLayout" enabled="true" bounds="[80,675][974,888]">
+                <node text="PROJECTOR-DDC994" resource-id="android:id/title" enabled="true" bounds="[80,721][561,788]" />
+                <node text="Chromecast" resource-id="android:id/summary" enabled="true" bounds="[80,788][305,842]" />
+              </node>
+              <node resource-id="com.android.settings:id/arrow_right" bounds="[974,760][1000,802]" />
+            </node>
+            <node class="android.widget.LinearLayout" clickable="true" enabled="false" bounds="[0,888][1080,1101]">
+              <node class="android.widget.RelativeLayout" enabled="false" bounds="[80,888][974,1101]">
+                <node text="OLD-TV" resource-id="android:id/title" enabled="false" bounds="[80,934][561,1001]" />
+                <node text="Unavailable" resource-id="android:id/summary" enabled="false" bounds="[80,1001][300,1055]" />
+              </node>
+            </node>
+            <node class="android.widget.LinearLayout" clickable="true" enabled="true" bounds="[0,1101][1080,1314]">
+              <node class="android.widget.RelativeLayout" enabled="true" bounds="[80,1101][974,1314]">
+                <node text="PROJECTOR-DDC994" resource-id="android:id/title" enabled="true" bounds="[80,1147][561,1214]" />
+                <node text="Wireless display" resource-id="android:id/summary" enabled="true" bounds="[80,1214][370,1268]" />
+              </node>
+              <node resource-id="com.android.settings:id/arrow_right" bounds="[974,1186][1000,1228]" />
+            </node>
+          </node>
+        </hierarchy>"""
+
+        items = proj._get_cast_screen_items(
+            skip_focus_check=True, xml_raw=sample_xml, auto_dismiss_modal=False
+        )
+        self.assertEqual(len(items), 3)
+        # First item MUST be the enabled 'Wireless display' entry, never 'Chromecast' or 'Unavailable'!
+        top = items[0]
+        self.assertEqual(top["name"], "PROJECTOR-DDC994")
+        self.assertEqual(top["summary"], "Wireless display")
+        self.assertTrue(top["is_wireless_display"])
+        self.assertTrue(top["is_miracast_sink"])
+        self.assertFalse(top["is_chromecast"])
+        self.assertTrue(top["available"])
+        # Safe tap X must be in the left third (well below arrow_right at x=974)
+        self.assertLess(top["tap_x"], 450)
+        self.assertEqual(top["tap_y"], (1101 + 1314) // 2)
+
+        cc_item = next(it for it in items if it.get("is_chromecast"))
+        self.assertFalse(cc_item["is_miracast_sink"])
+        self.assertFalse(cc_item["is_wireless_display"])
+
+        unavail_item = next(it for it in items if it["name"] == "OLD-TV")
+        self.assertTrue(unavail_item["is_unavailable"])
+        self.assertFalse(unavail_item["available"])
+        self.assertFalse(unavail_item["is_miracast_sink"])
+
+        # 2. Modal recovery: stuck 'PROJECTOR-DDC994 -> Disconnect' dialog
+        modal_xml = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+        <hierarchy rotation="0">
+          <node class="android.widget.LinearLayout" resource-id="miui:id/parentPanel" bounds="[0,1574][1080,2210]">
+            <node text="PROJECTOR-DDC994" resource-id="miui:id/alertTitle" bounds="[140,1654][940,1725]" />
+            <node text="Disconnect" resource-id="android:id/button2" clickable="true" bounds="[80,1990][1000,2130]" />
+          </node>
+        </hierarchy>"""
+        import xml.etree.ElementTree as ET
+        with mock.patch.object(proj, "_safe_tap") as mock_tap:
+            dismissed = proj._dismiss_blocking_cast_modal(ET.fromstring(modal_xml.strip()))
+            self.assertTrue(dismissed)
+            mock_tap.assert_called_once_with(540, 2060)
 
 
 if __name__ == "__main__":

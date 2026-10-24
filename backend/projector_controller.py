@@ -951,10 +951,21 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {{
                 seen_keys.add(key)
                 devices.append(item)
             else:
+                # Apenas atualiza coordenadas de toque se o item da UI for o sink Miracast real
+                # (nunca sobrescreve um dispositivo Miracast com a rota duplicada 'Chromecast'!)
+                if item.get("is_chromecast"):
+                    continue
                 for d in devices:
-                    if d["name"].lower() == key or d.get("raw_name", "").lower() == key or (item.get("is_projector") and d.get("is_projector")):
-                        d["tap_x"] = item["tap_x"]
-                        d["tap_y"] = item["tap_y"]
+                    if (
+                        d["name"].lower() == key
+                        or d.get("raw_name", "").lower() == key
+                        or (item.get("is_projector") and d.get("is_projector"))
+                    ):
+                        if item.get("is_miracast_sink") or "tap_x" not in d:
+                            d["tap_x"] = item["tap_x"]
+                            d["tap_y"] = item["tap_y"]
+                            d["summary"] = item.get("summary", "")
+                            d["is_miracast_sink"] = item.get("is_miracast_sink", False)
 
         devices.sort(
             key=lambda d: (
@@ -980,83 +991,303 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {{
             "miracast_devices": devices,
         }
 
-    def _get_cast_screen_items(self, skip_focus_check: bool = False) -> List[Dict[str, Any]]:
+    def _get_wfd_p2p_peers(self, raw_out: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """
+        Consulta diretamente o kernel/framework Android (`dumpsys display` e `dumpsys wifip2p`)
+        para descobrir quais dispositivos suportam Miracast (`WFD enabled: true`),
+        independentemente do idioma da UI ou de entradas duplicadas 'Chromecast'.
+        """
+        out = raw_out or self._run_adb(
+            "dumpsys display 2>/dev/null | grep -iE 'WifiDisplayStatus|mDisplays=|displays=' -A 8; "
+            "dumpsys wifip2p 2>/dev/null | grep -iE 'Device:|deviceAddress|wfdInfo:' -A 5",
+            timeout=2.5,
+        )
+        peers: Dict[str, Dict[str, Any]] = {}
+        for m in re.finditer(
+            r"(?:mDisplays=\[|displays=\[|,\s*|^|\n)\s*([^\r\n,]+?)\s*\(([0-9a-fA-F:]{17})\)\s*,\s*isAvailable\s*(true|false)",
+            out,
+        ):
+            name = re.sub(r"^(?:mDisplays=\[|displays=\[|\s)+", "", m.group(1)).strip()
+            mac = m.group(2).lower()
+            avail = m.group(3) == "true"
+            entry = {
+                "name": name,
+                "mac": mac,
+                "wfd_enabled": True,
+                "available": avail,
+            }
+            peers[name.lower()] = entry
+            peers[mac] = entry
+
+        for m in re.finditer(
+            r"Device:\s*([^\r\n,]+)(?:,\s*deviceAddress:\s*([0-9a-fA-F:]{17})|\s*[\r\n]+\s*deviceAddress:\s*([0-9a-fA-F:]{17}))([^\r\n]*)",
+            out,
+        ):
+            name = re.sub(r"^(?:mDisplays=\[|displays=\[|\s)+", "", m.group(1)).strip()
+            mac = (m.group(2) or m.group(3) or "").lower()
+            tail = m.group(4) or ""
+            wfd_ok = "wfd enabled: true" in tail.lower() or "wfd enabled: true" in out.lower()
+            if name:
+                prev = peers.get(name.lower(), {})
+                entry = {
+                    "name": name,
+                    "mac": mac or prev.get("mac", ""),
+                    "wfd_enabled": wfd_ok or prev.get("wfd_enabled", True),
+                    "available": True,
+                }
+                peers[name.lower()] = entry
+                if mac:
+                    peers[mac] = entry
+        return peers
+
+    def _dismiss_blocking_cast_modal(self, root: ET.Element) -> bool:
+        """
+        Detecta e fecha automaticamente qualquer modal/popup preso sobre a tela de Cast
+        (como o modal 'PROJECTOR-DDC994 -> Disconnect' aberto quando uma rota Chromecast trava).
+        """
+        disconnect_words = {
+            "disconnect",
+            "desconectar",
+            "cancel",
+            "cancelar",
+            "stop casting",
+            "parar transmissão",
+            "close",
+            "fechar",
+        }
+        has_alert_title = False
+        has_recycler = False
+        button_coords = None
+
+        for node in root.iter("node"):
+            res_id = (node.attrib.get("resource-id") or "").lower()
+            txt = (node.attrib.get("text") or "").strip().lower()
+            if "recycler_view" in res_id or "list_container" in res_id:
+                has_recycler = True
+            if "alerttitle" in res_id:
+                has_alert_title = True
+            if (
+                res_id in ("android:id/button1", "android:id/button2", "android:id/button3")
+                or txt in disconnect_words
+            ) and txt in disconnect_words:
+                bounds = node.attrib.get("bounds", "")
+                m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+                if m:
+                    x1, y1, x2, y2 = map(int, m.groups())
+                    button_coords = ((x1 + x2) // 2, (y1 + y2) // 2)
+
+        if button_coords and (has_alert_title or not has_recycler):
+            self._safe_tap(button_coords[0], button_coords[1])
+            return True
+        if has_alert_title and not has_recycler:
+            self._run_adb("input keyevent 4 2>/dev/null", timeout=1.5)
+            return True
+        return False
+
+    def _get_cast_screen_items(
+        self,
+        skip_focus_check: bool = False,
+        xml_raw: Optional[str] = None,
+        auto_dismiss_modal: bool = True,
+    ) -> List[Dict[str, Any]]:
         """
         Extrai dispositivos visíveis na lista de 'Cast / Wireless display' do Android,
-        priorizando o item 'Wireless display' (Miracast de vídeo) sobre 'Chromecast'.
+        classificando explicitamente `is_wireless_display`, `is_chromecast`, `is_unavailable`,
+        `is_connecting` e `is_connected` em múltiplos idiomas, e calculando coordenada X
+        segura no terço esquerdo (longe do botão lateral `arrow_right`).
         """
-        if not skip_focus_check:
-            focus = self._run_adb("dumpsys window displays 2>/dev/null | grep mFocusedApp", timeout=2.0)
-            if "WifiDisplaySettingsActivity" not in focus and "com.milink" not in focus:
-                return []
+        if xml_raw is None:
+            if not skip_focus_check:
+                focus = self._run_adb(
+                    "dumpsys window displays 2>/dev/null | grep mFocusedApp", timeout=2.0
+                )
+                if "WifiDisplaySettingsActivity" not in focus and "com.milink" not in focus:
+                    return []
 
-        xml_raw = self._run_adb(
-            "uiautomator dump /sdcard/cast_scan.xml >/dev/null 2>&1 && cat /sdcard/cast_scan.xml",
-            timeout=4.0,
-        )
-        if "<hierarchy" not in xml_raw:
+            xml_raw = self._run_adb(
+                "uiautomator dump /sdcard/cast_scan.xml >/dev/null 2>&1 && cat /sdcard/cast_scan.xml",
+                timeout=4.0,
+            )
+        if not xml_raw or "<hierarchy" not in xml_raw:
             return []
 
         xml_str = xml_raw[xml_raw.index("<hierarchy") :]
         items: List[Dict[str, Any]] = []
         ignore_titles = {
             "cast",
+            "transmitir",
             "wireless display",
+            "tela sem fio",
+            "ecrã sem fios",
+            "pantalla inalámbrica",
             "demos",
             "special features",
             "minimise window",
             "cast with screen off",
             "hide private items",
             "help",
+            "ajuda",
         }
+        wireless_keywords = (
+            "wireless display",
+            "tela sem fio",
+            "ecrã sem fios",
+            "pantalla inalámbrica",
+            "écran sans fil",
+            "drahtloses display",
+            "schermo wireless",
+            "miracast",
+            "wi-fi direct",
+            "smart view",
+            "screen sharing",
+        )
+        unavailable_keywords = (
+            "unavailable",
+            "indisponível",
+            "indisponivel",
+            "not available",
+            "no disponible",
+            "non disponible",
+            "nicht verfügbar",
+            "fora de alcance",
+        )
+        connecting_keywords = (
+            "connecting",
+            "conectando",
+            "a ligar",
+            "connexion",
+            "verbinden",
+        )
+        connected_keywords = (
+            "connected",
+            "conectado",
+            "ligado",
+            "verbunden",
+            "connecté",
+        )
+
         try:
             root = ET.fromstring(xml_str)
-            for parent in root.iter("node"):
-                children_texts = [
-                    (c.attrib.get("text") or "").strip()
-                    for c in parent.iter("node")
-                    if (c.attrib.get("text") or "").strip()
-                ]
-                for node in parent.findall("node"):
+            if auto_dismiss_modal and self._dismiss_blocking_cast_modal(root):
+                time.sleep(0.55)
+                xml_retry = self._run_adb(
+                    "uiautomator dump /sdcard/cast_scan.xml >/dev/null 2>&1 && cat /sdcard/cast_scan.xml",
+                    timeout=4.0,
+                )
+                if "<hierarchy" in xml_retry:
+                    root = ET.fromstring(xml_retry[xml_retry.index("<hierarchy") :])
+
+            # Garante que a chave mestre 'Wireless display' (CheckBox/Switch) esteja ligada
+            if auto_dismiss_modal:
+                for node in root.iter("node"):
                     res_id = node.attrib.get("resource-id", "")
-                    text = (node.attrib.get("text") or "").strip()
                     if (
-                        res_id == "android:id/title"
-                        and text
-                        and text.lower() not in ignore_titles
+                        res_id in ("android:id/checkbox", "android:id/switch_widget")
+                        and node.attrib.get("checkable") == "true"
+                        and node.attrib.get("checked") == "false"
+                        and node.attrib.get("enabled") == "true"
                     ):
-                        bounds = parent.attrib.get("bounds") or node.attrib.get("bounds", "")
-                        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
-                        if not m:
-                            continue
-                        x1, y1, x2, y2 = map(int, m.groups())
-                        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                        summary_joined = " ".join(children_texts).lower()
-                        is_miracast = "wireless display" in summary_joined or "connected" in summary_joined
-                        is_connected = "connected" in summary_joined
-                        items.append(
-                            {
-                                "id": f"ui:{text}",
-                                "name": text,
-                                "address": f"Android Cast Screen ({cx},{cy})",
-                                "protocol": (
-                                    "Miracast (Wireless Display)"
-                                    if is_miracast
-                                    else "Cast (Android)"
-                                ),
-                                "available": True,
-                                "connected": is_connected,
-                                "is_miracast_sink": is_miracast,
-                                "tap_x": cx,
-                                "tap_y": cy,
-                                "source": "android",
-                                "is_projector": any(k in text.lower() for k in PROJECTOR_KEYWORDS),
-                            }
+                        m_sw = re.match(
+                            r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
+                            node.attrib.get("bounds", ""),
                         )
+                        if m_sw:
+                            sx1, sy1, sx2, sy2 = map(int, m_sw.groups())
+                            self._safe_tap((sx1 + sx2) // 2, (sy1 + sy2) // 2)
+                            time.sleep(0.6)
+                            break
+
+            for parent in root.iter("node"):
+                direct_children = parent.findall("node")
+                if not direct_children:
+                    continue
+
+                title_node = None
+                summary_text = ""
+                for child in direct_children:
+                    cid = child.attrib.get("resource-id", "")
+                    ctext = (child.attrib.get("text") or "").strip()
+                    if cid == "android:id/title" and ctext:
+                        title_node = child
+                    elif cid == "android:id/summary" and ctext:
+                        summary_text = ctext
+
+                if title_node is None:
+                    continue
+
+                text = (title_node.attrib.get("text") or "").strip()
+                if not text or text.lower() in ignore_titles:
+                    continue
+
+                bounds = parent.attrib.get("bounds") or title_node.attrib.get("bounds", "")
+                m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+                if not m:
+                    continue
+                x1, y1, x2, y2 = map(int, m.groups())
+                # Toque seguro no terço esquerdo do título (evita clicar em com.android.settings:id/arrow_right)
+                tx = x1 + max(100, min(260, (x2 - x1) // 3))
+                ty = (y1 + y2) // 2
+
+                row_enabled = (
+                    parent.attrib.get("enabled", "true") == "true"
+                    and title_node.attrib.get("enabled", "true") == "true"
+                )
+                summary_low = summary_text.lower()
+                is_chromecast = "chromecast" in summary_low or "google cast" in summary_low
+                is_unavailable = (not row_enabled) or any(
+                    w in summary_low for w in unavailable_keywords
+                )
+                is_connecting = any(w in summary_low for w in connecting_keywords)
+                is_connected = (not is_unavailable) and any(
+                    w in summary_low for w in connected_keywords
+                )
+                is_wireless_display = (not is_chromecast) and (
+                    any(w in summary_low for w in wireless_keywords)
+                    or is_connected
+                    or (not summary_low and row_enabled)
+                )
+                is_miracast_sink = is_wireless_display and (not is_unavailable)
+
+                items.append(
+                    {
+                        "id": f"ui:{text}:{'wfd' if is_wireless_display else ('cc' if is_chromecast else 'cast')}",
+                        "name": text,
+                        "summary": summary_text,
+                        "address": f"Android Cast Screen ({tx},{ty})",
+                        "protocol": (
+                            "Miracast (Wireless Display)"
+                            if is_wireless_display
+                            else ("Chromecast (LAN)" if is_chromecast else "Cast (Android)")
+                        ),
+                        "available": not is_unavailable,
+                        "enabled": row_enabled,
+                        "connected": is_connected,
+                        "is_connecting": is_connecting,
+                        "is_unavailable": is_unavailable,
+                        "is_chromecast": is_chromecast,
+                        "is_wireless_display": is_wireless_display,
+                        "is_miracast_sink": is_miracast_sink,
+                        "tap_x": tx,
+                        "tap_y": ty,
+                        "source": "android",
+                        "is_projector": any(k in text.lower() for k in PROJECTOR_KEYWORDS),
+                    }
+                )
         except Exception:
             pass
-        # Prioriza entradas "Wireless display" (Miracast de vídeo) antes de "Chromecast"
-        items.sort(key=lambda it: (not bool(it.get("is_miracast_sink")), it.get("name", "")))
+
+        # Prioridade estrita:
+        # 1º: Wireless Display disponível e habilitado (is_miracast_sink=True)
+        # 2º: Dispositivos disponíveis que não sejam Chromecast
+        # 3º: Chromecast ou Indisponíveis por último
+        items.sort(
+            key=lambda it: (
+                not bool(it.get("is_miracast_sink")),
+                bool(it.get("is_unavailable")),
+                bool(it.get("is_chromecast")),
+                it.get("name", ""),
+            )
+        )
         return items
 
     def discover_dlna_devices(self, timeout: float = 1.2) -> List[Dict[str, Any]]:
@@ -1134,33 +1365,39 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {{
                 continue
         return dlna_list
 
-    def _connect_android_miracast_target(self, target_query: str = "") -> Optional[Dict[str, Any]]:
+    def _prepare_clean_cast_screen(self, disp_chk: str = "") -> str:
         """
-        Executa a sequência verificada de conexão Miracast / Cast Universal no Android (sem cabo USB):
-        1. Se já estiver conectado ao mesmo alvo (`activeDisplayState=2`), mantém a projeção ativa;
-        2. Caso contrário, abre `WifiDisplaySettings`, localiza a Smart TV ou Projetor escolhido
-           (`target_query`, ou priorizando `Projector` como favorito quando automático), clica via
-           `UIAutomator Safe-Tap`, confirma qualquer pop-up de permissão e aguarda `activeDisplayState=2`.
+        Motor de Auto-Recuperação de Tela (Universal Multi-OEM):
+        1. Verifica se há janelas modais presas (ex.: 'PROJECTOR-DDC994 -> Disconnect') ou
+           se `scanState=1` não está ativo;
+        2. Garante `wifi_display_on=1` e abre `android.settings.CAST_SETTINGS` limpo;
+        3. Se alguma rota Chromecast fantasma estiver presa em 'Connecting' com `mDesiredDevice=null`,
+           reinicia `com.android.settings` para destravar o `MediaRouter`.
         """
-        q = (target_query or "").strip().lower()
-        disp_chk = self._run_adb(
-            "dumpsys display 2>/dev/null | grep -E 'mCurrentStatus=|mRemoteDisplayConnected=|mActiveDisplay='",
-            timeout=2.5,
+        state_out = disp_chk or self._run_adb(
+            "dumpsys display 2>/dev/null | grep -iE 'WifiDisplayStatus|mCurrentStatus=|mDesiredDevice=|mRemoteDisplayConnected=|mActiveDisplay=|mDisplays=' -A 6; "
+            "dumpsys wifip2p 2>/dev/null | grep -iE 'Device:|deviceAddress|wfdInfo:' -A 5; "
+            "dumpsys window displays 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp'",
+            timeout=3.0,
         )
-        if ("activeDisplayState=2" in disp_chk or "mRemoteDisplayConnected=true" in disp_chk) and (
-            not q or q in disp_chk.lower()
-        ):
-            return {"ok": True, "already_connected": True}
 
-        if "scanState=1" not in disp_chk:
+        # Detecta se há um popup modal (como 'u0 PROJECTOR-DDC994') em foco sobre a WifiDisplaySettingsActivity
+        has_modal_focus = False
+        for line in state_out.splitlines():
+            if "mCurrentFocus=" in line and "WifiDisplaySettingsActivity" not in line and "com.milink" not in line:
+                has_modal_focus = True
+
+        need_fresh_restart = ("scanState=1" not in state_out) or has_modal_focus
+        if need_fresh_restart:
             self._run_adb(
                 "cmd statusbar collapse 2>/dev/null; "
+                "input keyevent 4 2>/dev/null; "
                 "am force-stop com.android.settings 2>/dev/null; "
                 "settings put global wifi_display_on 1 2>/dev/null; "
-                "am start --user 0 -a android.settings.CAST_SETTINGS >/dev/null 2>&1",
+                "am start --user 0 --activity-clear-top -a android.settings.CAST_SETTINGS >/dev/null 2>&1",
                 timeout=3.5,
             )
-            time.sleep(2.2)
+            time.sleep(1.5)
         else:
             self._run_adb(
                 "cmd statusbar collapse 2>/dev/null; "
@@ -1168,71 +1405,197 @@ for ($attempt = 0; $attempt -lt 8; $attempt++) {{
                 "am start --user 0 -a android.settings.CAST_SETTINGS >/dev/null 2>&1",
                 timeout=3.0,
             )
-            time.sleep(0.9)
+            time.sleep(0.8)
 
-        items = self._get_cast_screen_items(skip_focus_check=True)
-        chosen = None
-        if q:
-            def _item_matches(it: Dict[str, Any]) -> bool:
-                it_name = it.get("name", "").lower()
-                it_raw = it.get("raw_name", "").lower()
-                it_id = it.get("id", "").lower()
-                if q in it_name or (it_raw and q in it_raw) or q in it_id:
-                    return True
-                if "projector" in q and it.get("is_projector"):
-                    return True
-                return False
+        return state_out
 
-            chosen = next(
-                (it for it in items if it.get("is_miracast_sink") and _item_matches(it)),
-                next(
-                    (it for it in items if _item_matches(it)),
+    def _connect_android_miracast_target(self, target_query: str = "") -> Optional[Dict[str, Any]]:
+        """
+        Arquitetura Universal Zero-Falhas para Conexão Miracast / Wireless Display (Qualquer TV, Projetor ou Dongle):
+        1. Se já estiver conectado ao mesmo alvo (`activeDisplayState=2`), mantém a projeção ativa;
+        2. Executa `_prepare_clean_cast_screen()` para fechar modais presos e iniciar scan Wi-Fi Direct limpo;
+        3. Faz Polling Adaptativo de Descoberta P2P (até 6.0s) cruzando `dumpsys wifip2p` / `dumpsys display`
+           com a UI, ignorando entradas duplicadas `Chromecast` ou `Unavailable` enquanto aguarda a entrada
+           `Wireless display` (`is_miracast_sink=True`) habilitar;
+        4. Dá 1 único toque de precisão no terço esquerdo do item (longe de `arrow_right`) e monitora a
+           Máquina de Estados de Handshake (`mDesiredDevice`, `GroupNegotiationState`, `activeDisplayState=2`)
+           sem enviar toques repetidos que cancelariam a conexão.
+        """
+        q = (target_query or "").strip().lower()
+        disp_chk = self._run_adb(
+            "dumpsys display 2>/dev/null | grep -iE 'WifiDisplayStatus|mCurrentStatus=|mDesiredDevice=|mRemoteDisplayConnected=|mActiveDisplay=|mDisplays=' -A 6; "
+            "dumpsys wifip2p 2>/dev/null | grep -iE 'Device:|deviceAddress|wfdInfo:' -A 5; "
+            "dumpsys window displays 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp'",
+            timeout=3.0,
+        )
+        if ("activeDisplayState=2" in disp_chk or "mRemoteDisplayConnected=true" in disp_chk) and (
+            not q or q in disp_chk.lower() or "projector" in q
+        ):
+            return {"ok": True, "already_connected": True, "connected": True}
+
+        self._prepare_clean_cast_screen(disp_chk)
+        wfd_peers = self._get_wfd_p2p_peers(disp_chk)
+
+        def _item_matches(it: Dict[str, Any]) -> bool:
+            if not q:
+                return True
+            it_name = (it.get("name") or "").lower()
+            it_raw = (it.get("raw_name") or "").lower()
+            it_id = (it.get("id") or "").lower()
+            if q in it_name or (it_raw and q in it_raw) or q in it_id:
+                return True
+            if "projector" in q and it.get("is_projector"):
+                return True
+            for peer_key, peer_info in wfd_peers.items():
+                if q in peer_key and peer_info.get("name", "").lower() == it_name:
+                    return True
+            return False
+
+        def _is_known_wfd_capable(it: Dict[str, Any], all_items: List[Dict[str, Any]]) -> bool:
+            """Verifica se o dispositivo suporta Miracast/WFD (no kernel ou por ter uma linha Wireless display na lista)."""
+            nm = (it.get("name") or "").lower()
+            if nm in wfd_peers:
+                return True
+            if it.get("is_projector"):
+                return True
+            if any(
+                other.get("name", "").lower() == nm and other.get("is_wireless_display")
+                for other in all_items
+            ):
+                return True
+            return False
+
+        chosen: Optional[Dict[str, Any]] = None
+        items: List[Dict[str, Any]] = []
+        restarted_stuck_chromecast = False
+
+        # Polling Adaptativo de Descoberta P2P (até 6 ciclos de ~1.0s = ~6.0s para `P2P-DEVICE-FOUND`)
+        for poll_step in range(6):
+            items = self._get_cast_screen_items(skip_focus_check=True, auto_dismiss_modal=True)
+
+            # Se uma rota Chromecast estiver presa em 'Connecting' com mDesiredDevice=null, reinicia Settings uma vez
+            if (
+                not restarted_stuck_chromecast
+                and any(it.get("is_connecting") and not it.get("is_wireless_display") for it in items)
+                and "mDesiredDevice=null" in disp_chk
+            ):
+                restarted_stuck_chromecast = True
+                self._run_adb(
+                    "am force-stop com.android.settings 2>/dev/null; "
+                    "settings put global wifi_display_on 1 2>/dev/null; "
+                    "am start --user 0 --activity-clear-top -a android.settings.CAST_SETTINGS >/dev/null 2>&1",
+                    timeout=3.5,
+                )
+                time.sleep(1.6)
+                items = self._get_cast_screen_items(skip_focus_check=True, auto_dismiss_modal=True)
+
+            # 1º: Procura entrada Miracast real, disponível e habilitada (`is_miracast_sink=True` e `not is_chromecast`)
+            if q:
+                chosen = next(
+                    (
+                        it
+                        for it in items
+                        if it.get("is_miracast_sink")
+                        and not it.get("is_chromecast")
+                        and _item_matches(it)
+                    ),
                     None,
-                ),
-            )
+                )
+            else:
+                chosen = next(
+                    (
+                        it
+                        for it in items
+                        if it.get("is_projector")
+                        and it.get("is_miracast_sink")
+                        and not it.get("is_chromecast")
+                    ),
+                    next(
+                        (
+                            it
+                            for it in items
+                            if it.get("is_miracast_sink") and not it.get("is_chromecast")
+                        ),
+                        None,
+                    ),
+                )
+
+            if chosen:
+                break
+
+            # Se ainda não apareceu habilitado na UI, faz scroll suave no passo 3 caso a lista seja longa
+            if poll_step == 3:
+                self._run_adb("input swipe 540 1500 540 700 300 2>/dev/null", timeout=2.0)
+
+            time.sleep(0.95)
+            wfd_peers.update(self._get_wfd_p2p_peers())
+
+        # Somente se após todo o ciclo P2P o dispositivo for um Chromecast puro (sem suporte WFD), permite fallback
         if not chosen and items:
-            chosen = next(
-                (it for it in items if it.get("is_projector") and it.get("is_miracast_sink")),
-                next(
-                    (it for it in items if it.get("is_projector")),
-                    items[0],
-                ),
-            )
+            candidates = [it for it in items if _item_matches(it) and it.get("available")]
+            for cand in candidates:
+                if not cand.get("is_chromecast"):
+                    chosen = cand
+                    break
+                if not _is_known_wfd_capable(cand, items):
+                    chosen = cand
+                    break
 
         if not chosen or "tap_x" not in chosen or "tap_y" not in chosen:
             return None
 
         tx, ty = int(chosen["tap_x"]), int(chosen["tap_y"])
-        # Toca apenas até mDesiredDevice != null ou activeDisplayState in (1, 2)
-        for _ in range(6):
-            self._safe_tap(tx, ty)
-            time.sleep(0.45)
-            self._confirm_cast_dialog_if_present()
-            st_now = self._run_adb(
-                "dumpsys display 2>/dev/null | grep -E 'mDesiredDevice=|mCurrentStatus=|mRemoteDisplayConnected='",
-                timeout=2.0,
-            )
-            if (
-                ("mDesiredDevice=" in st_now and "mDesiredDevice=null" not in st_now)
-                or "activeDisplayState=1" in st_now
-                or "activeDisplayState=2" in st_now
-                or "mRemoteDisplayConnected=true" in st_now
-            ):
-                break
+        # Toque Único de Precisão no terço esquerdo da linha (jamais faz loop de 6 toques seguidos!)
+        self._safe_tap(tx, ty)
 
-        # Aguarda o handshake RTSP Miracast / Cast completar (normalmente ~3.5s a 5s)
         connected = False
-        for step in range(9):
-            time.sleep(0.65)
-            if step in (1, 3):
+        retapped = False
+        # Máquina de Estados de Handshake P2P + RTSP (até ~11s)
+        for step in range(11):
+            time.sleep(0.95)
+            if step in (0, 1, 2, 4, 6):
                 self._confirm_cast_dialog_if_present()
+
             st_now = self._run_adb(
-                "dumpsys display 2>/dev/null | grep -E 'mCurrentStatus=|mRemoteDisplayConnected='",
-                timeout=2.0,
+                "dumpsys display 2>/dev/null | grep -E 'mDesiredDevice=|mConnectingDisplay=|mConnectedDevice=|mCurrentStatus=|mRemoteDisplayConnected='; "
+                "dumpsys wifip2p 2>/dev/null | grep -E 'curState='",
+                timeout=2.2,
             )
             if "activeDisplayState=2" in st_now or "mRemoteDisplayConnected=true" in st_now:
                 connected = True
                 break
+
+            handshake_in_progress = (
+                ("mDesiredDevice=" in st_now and "mDesiredDevice=null" not in st_now)
+                or ("mConnectingDisplay=" in st_now and "mConnectingDisplay=null" not in st_now)
+                or ("mConnectedDevice=" in st_now and "mConnectedDevice=null" not in st_now)
+                or "activeDisplayState=1" in st_now
+                or "GroupNegotiationState" in st_now
+                or "GroupCreatedState" in st_now
+            )
+            if handshake_in_progress:
+                # Handshake Miracast em andamento: PROIBIDO tocar novamente para não abrir o modal 'Disconnect'!
+                continue
+
+            # Retry seguro único: somente se após ~2.8s nenhum handshake iniciou e a linha continua parada e habilitada
+            if step == 2 and not retapped:
+                fresh_items = self._get_cast_screen_items(
+                    skip_focus_check=True, auto_dismiss_modal=False
+                )
+                still_idle = next(
+                    (
+                        it
+                        for it in fresh_items
+                        if it.get("name", "").lower() == chosen.get("name", "").lower()
+                        and it.get("is_miracast_sink")
+                        and not it.get("is_connecting")
+                        and not it.get("connected")
+                    ),
+                    None,
+                )
+                if still_idle:
+                    retapped = True
+                    self._safe_tap(int(still_idle["tap_x"]), int(still_idle["tap_y"]))
 
         if connected:
             self._run_adb(
