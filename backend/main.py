@@ -4,13 +4,14 @@ Hospeda o PWA instalável e roteia comandos de controle remoto / trackpad / tecl
 com latência zero entre Android TV Box (ADB Loopback) e Linux Desktop (Termux:X11).
 """
 
+import asyncio
 import base64
 import json
 import os
 import socket
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -157,9 +158,21 @@ class SshExecRequest(BaseModel):
     target: str = "android"
 
 
+class StandbyRequest(BaseModel):
+    standby: Optional[bool] = None
+    auto_standby_minutes: Optional[int] = None
+    reason: str = "manual"
+
+
+class KeyActionRequest(BaseModel):
+    key: str
+    target: str = ""
+
+
 async def broadcast_state() -> None:
-    """Notifica todos os smartphones conectados sobre mudança de modo e bateria."""
+    """Notifica todos os smartphones conectados sobre mudança de modo, Eco-Standby e bateria."""
     bat = state.android.get_battery_and_health()
+    standby_info = state.android.get_standby_state()
     payload = json.dumps(
         {
             "type": "state",
@@ -168,10 +181,12 @@ async def broadcast_state() -> None:
             "android_backend": state.android.backend_name,
             "phone_online": bat.get("phone_online", True),
             "battery": bat,
+            "standby_mode": state.android.standby_mode,
+            "standby": standby_info,
         }
     )
     dead: List[WebSocket] = []
-    for ws in state.clients:
+    for ws in list(state.clients):
         try:
             await ws.send_text(payload)
         except Exception:
@@ -186,6 +201,7 @@ def apply_mode_switch(target_mode: str) -> str:
     if normalized not in ("tv", "linux", "games"):
         raise ValueError("Modo inválido. Use 'tv', 'linux' ou 'games'.")
 
+    state.android.touch_activity(wake_if_standby=True)
     state.mode = normalized
     if normalized == "linux":
         state.android.switch_to_linux_desktop()
@@ -198,6 +214,7 @@ def apply_mode_switch(target_mode: str) -> str:
 
 def execute_app_launch(app_id: str) -> Dict[str, Any]:
     """Abre um aplicativo do catálogo Android TV, Linux Desktop ou Games."""
+    state.android.touch_activity(wake_if_standby=True)
     if app_id in ANDROID_APPS:
         app_info = ANDROID_APPS[app_id]
         if app_id == "displaylink":
@@ -238,9 +255,32 @@ def execute_app_launch(app_id: str) -> Dict[str, Any]:
     raise KeyError(f"Aplicativo '{app_id}' não encontrado.")
 
 
+def dispatch_dpad_key(key: str, target_mode: str) -> None:
+    """Roteia comando D-Pad / mídia de acordo com o modo ativo (`tv`, `linux` ou `games`)."""
+    state.android.touch_activity(wake_if_standby=True)
+    if key in ("VOL_UP", "VOL_DOWN", "MUTE", "PLAY_PAUSE", "PREV", "NEXT"):
+        state.android.send_key(key)
+    elif target_mode == "games" and key in ("UP", "DOWN", "LEFT", "RIGHT", "OK"):
+        state.android.send_gamepad_key(key)
+    elif target_mode == "linux":
+        linux_dpad_map = {
+            "UP": "Up",
+            "DOWN": "Down",
+            "LEFT": "Left",
+            "RIGHT": "Right",
+            "OK": "Return",
+            "BACK": "Escape",
+            "HOME": "Super_L",
+        }
+        state.x11.send_key(linux_dpad_map.get(key, key))
+    else:
+        state.android.send_key(key)
+
+
 @app.get("/api/status")
 async def api_status() -> JSONResponse:
     bat = state.android.get_battery_and_health()
+    standby_info = state.android.get_standby_state()
     return JSONResponse(
         {
             "ok": True,
@@ -252,6 +292,8 @@ async def api_status() -> JSONResponse:
             "android_backend": state.android.backend_name,
             "phone_online": bat.get("phone_online", True),
             "battery": bat,
+            "standby_mode": state.android.standby_mode,
+            "standby": standby_info,
             "apps": get_all_apps(),
         }
     )
@@ -259,13 +301,74 @@ async def api_status() -> JSONResponse:
 
 @app.get("/api/battery")
 async def api_battery(force: bool = False) -> JSONResponse:
-    bat = state.android.get_battery_and_health(force=force)
-    return JSONResponse({"ok": True, "battery": bat})
+    if force:
+        bat = await asyncio.to_thread(state.android.get_battery_and_health, True)
+    else:
+        bat = state.android.get_battery_and_health(force=False)
+    return JSONResponse(
+        {
+            "ok": True,
+            "battery": bat,
+            "standby_mode": state.android.standby_mode,
+            "standby": state.android.get_standby_state(),
+        }
+    )
+
+
+@app.get("/api/system/standby")
+async def api_system_standby_get() -> JSONResponse:
+    return JSONResponse(
+        {
+            "ok": True,
+            "standby_mode": state.android.standby_mode,
+            "standby": state.android.get_standby_state(),
+            "mode": state.mode,
+        }
+    )
+
+
+@app.post("/api/system/standby")
+async def api_system_standby_post(req: StandbyRequest) -> JSONResponse:
+    if req.standby is None and req.auto_standby_minutes is not None:
+        state.android.auto_standby_minutes = max(0, int(req.auto_standby_minutes))
+        state.android._save_runtime_cache(
+            auto_standby_minutes=state.android.auto_standby_minutes
+        )
+        standby_info = state.android.get_standby_state()
+        await broadcast_state()
+        return JSONResponse(
+            {
+                "ok": True,
+                "standby_mode": state.android.standby_mode,
+                "standby": standby_info,
+                "mode": state.mode,
+                "message": (
+                    f"⏱️ Auto-Hibernation timer set to {state.android.auto_standby_minutes} min."
+                    if state.android.auto_standby_minutes > 0
+                    else "⏱️ Auto-Hibernation timer disabled (Manual only)."
+                ),
+            }
+        )
+
+    target_standby = (
+        (not state.android.standby_mode) if req.standby is None else bool(req.standby)
+    )
+    res = await asyncio.to_thread(
+        state.android.set_standby_mode,
+        target_standby,
+        req.reason or "manual",
+        req.auto_standby_minutes,
+    )
+    if not res.get("standby_mode"):
+        state.mode = "tv"
+    res["mode"] = state.mode
+    await broadcast_state()
+    return JSONResponse(res)
 
 
 @app.post("/api/system/revive")
 async def api_system_revive() -> JSONResponse:
-    res = state.android.revive_phone_connection()
+    res = await asyncio.to_thread(state.android.revive_phone_connection)
     await broadcast_state()
     return JSONResponse(res)
 
@@ -273,7 +376,7 @@ async def api_system_revive() -> JSONResponse:
 @app.post("/api/mode")
 async def api_set_mode(req: ModeRequest) -> JSONResponse:
     try:
-        new_mode = apply_mode_switch(req.mode)
+        new_mode = await asyncio.to_thread(apply_mode_switch, req.mode)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -284,7 +387,7 @@ async def api_set_mode(req: ModeRequest) -> JSONResponse:
 @app.post("/api/launch")
 async def api_launch(req: LaunchRequest) -> JSONResponse:
     try:
-        result = execute_app_launch(req.app_id)
+        result = await asyncio.to_thread(execute_app_launch, req.app_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -292,9 +395,27 @@ async def api_launch(req: LaunchRequest) -> JSONResponse:
     return JSONResponse(result)
 
 
+@app.post("/api/dpad")
+async def api_dpad(req: KeyActionRequest) -> JSONResponse:
+    target_mode = req.target or state.mode
+    dispatch_dpad_key(req.key, target_mode)
+    return JSONResponse({"ok": True, "key": req.key, "mode": target_mode})
+
+
+@app.post("/api/key")
+async def api_key(req: KeyActionRequest) -> JSONResponse:
+    target_mode = req.target or state.mode
+    state.android.touch_activity(wake_if_standby=True)
+    if target_mode == "linux":
+        state.x11.send_key(req.key)
+    else:
+        state.android.send_key(req.key)
+    return JSONResponse({"ok": True, "key": req.key, "mode": target_mode})
+
+
 @app.get("/api/projector/status")
 async def api_projector_status() -> JSONResponse:
-    status = state.projector.parse_miracast_status()
+    status = await asyncio.to_thread(state.projector.parse_miracast_status)
     return JSONResponse(
         {
             "ok": True,
@@ -310,33 +431,37 @@ async def api_projector_status() -> JSONResponse:
 
 @app.post("/api/projector/scan")
 async def api_projector_scan(req: ProjectorConnectRequest) -> JSONResponse:
-    res = state.projector.scan_and_open_cast(auto_connect=req.auto_connect)
+    res = await asyncio.to_thread(
+        state.projector.scan_and_open_cast, req.auto_connect
+    )
     return JSONResponse(res)
 
 
 @app.post("/api/projector/connect")
 async def api_projector_connect(req: ProjectorConnectRequest) -> JSONResponse:
     query = (req.target_name or req.target or "").strip()
-    res = state.projector.connect_device(target_query=query)
+    res = await asyncio.to_thread(state.projector.connect_device, query)
     return JSONResponse(res)
 
 
 @app.post("/api/projector/display-mode")
 async def api_projector_display_mode(req: ProjectorDisplayModeRequest) -> JSONResponse:
-    res = state.projector.set_windows_display_mode(req.mode)
+    res = await asyncio.to_thread(state.projector.set_windows_display_mode, req.mode)
     return JSONResponse(res)
 
 
 @app.post("/api/projector/wake-phone")
 async def api_projector_wake_phone() -> JSONResponse:
-    res = state.projector.wake_phone_screen(bring_to_front=True)
+    res = await asyncio.to_thread(state.projector.wake_phone_screen, True)
     return JSONResponse(res)
 
 
 @app.post("/api/projector/locate-ip")
 async def api_projector_locate_ip() -> JSONResponse:
-    lan_dev = state.projector.discover_projector_network_device(deep_scan=True)
-    status = state.projector.parse_miracast_status(deep_scan_ip=False)
+    lan_dev = await asyncio.to_thread(
+        state.projector.discover_projector_network_device, True
+    )
+    status = await asyncio.to_thread(state.projector.parse_miracast_status, False)
     ip_found = (lan_dev or {}).get("ip") or status.get("projector_ip")
     return JSONResponse(
         {
@@ -355,25 +480,27 @@ async def api_projector_locate_ip() -> JSONResponse:
 
 @app.post("/api/projector/miui-cast")
 async def api_projector_miui_cast() -> JSONResponse:
-    res = state.projector.open_miui_cast_with_screen_off()
+    res = await asyncio.to_thread(state.projector.open_miui_cast_with_screen_off)
     return JSONResponse(res)
 
 
 @app.post("/api/projector/windows-cast")
 async def api_projector_windows_cast() -> JSONResponse:
-    res = state.projector.open_windows_wireless_display()
+    res = await asyncio.to_thread(state.projector.open_windows_wireless_display)
     return JSONResponse(res)
 
 
 @app.post("/api/projector/hdmi")
 async def api_projector_hdmi() -> JSONResponse:
-    res = state.projector.open_hdmi_displaylink()
+    res = await asyncio.to_thread(state.projector.open_hdmi_displaylink)
     return JSONResponse(res)
 
 
 @app.post("/api/projector/dlna-cast")
 async def api_projector_dlna_cast(req: DlnaCastRequest) -> JSONResponse:
-    res = state.projector.send_dlna_media_url(req.control_url, req.media_url)
+    res = await asyncio.to_thread(
+        state.projector.send_dlna_media_url, req.control_url, req.media_url
+    )
     return JSONResponse(res)
 
 
@@ -382,31 +509,32 @@ async def api_projector_dlna_cast(req: DlnaCastRequest) -> JSONResponse:
 
 @app.get("/api/wifi/status")
 async def api_wifi_status() -> JSONResponse:
-    res = state.wifi.get_wifi_status()
+    res = await asyncio.to_thread(state.wifi.get_wifi_status)
     return JSONResponse(res)
 
 
 @app.get("/api/wifi/scan")
 @app.post("/api/wifi/scan")
 async def api_wifi_scan() -> JSONResponse:
-    res = state.wifi.scan_wifi_networks()
+    res = await asyncio.to_thread(state.wifi.scan_wifi_networks)
     return JSONResponse(res)
 
 
 @app.post("/api/wifi/connect")
 async def api_wifi_connect(req: WifiConnectRequest) -> JSONResponse:
-    res = state.wifi.connect_wifi_network(
-        ssid=req.ssid,
-        password=req.password,
-        security=req.security,
-        save_only=req.save_only,
+    res = await asyncio.to_thread(
+        state.wifi.connect_wifi_network,
+        req.ssid,
+        req.password,
+        req.security,
+        req.save_only,
     )
     return JSONResponse(res)
 
 
 @app.get("/api/wifi/rescue-hotspot")
 async def api_wifi_rescue_hotspot_get() -> JSONResponse:
-    status = state.wifi.get_wifi_status()
+    status = await asyncio.to_thread(state.wifi.get_wifi_status)
     return JSONResponse(
         {
             "ok": True,
@@ -419,15 +547,15 @@ async def api_wifi_rescue_hotspot_get() -> JSONResponse:
 
 @app.post("/api/wifi/rescue-hotspot")
 async def api_wifi_rescue_hotspot_set(req: WifiRescueHotspotRequest) -> JSONResponse:
-    res = state.wifi.configure_rescue_hotspot(
-        ssid=req.ssid,
-        password=req.password,
-        security=req.security,
-        auto_connect=req.auto_connect,
-        connect_now=req.connect_now,
+    res = await asyncio.to_thread(
+        state.wifi.configure_rescue_hotspot,
+        req.ssid,
+        req.password,
+        req.security,
+        req.auto_connect,
+        req.connect_now,
     )
     return JSONResponse(res)
-
 
 
 # ==================== ENDPOINTS SESSÃO GAMES & BLUETOOTH ====================
@@ -435,13 +563,14 @@ async def api_wifi_rescue_hotspot_set(req: WifiRescueHotspotRequest) -> JSONResp
 
 @app.get("/api/games/status")
 async def api_games_status() -> JSONResponse:
-    res = state.gaming.get_games_status()
+    res = await asyncio.to_thread(state.gaming.get_games_status)
     return JSONResponse(res)
 
 
 @app.post("/api/games/launch")
 async def api_games_launch(req: EmulatorActionRequest) -> JSONResponse:
-    res = state.gaming.launch_emulator(req.emulator_id)
+    state.android.touch_activity(wake_if_standby=True)
+    res = await asyncio.to_thread(state.gaming.launch_emulator, req.emulator_id)
     if res.get("ok"):
         state.mode = "games"
         await broadcast_state()
@@ -450,7 +579,7 @@ async def api_games_launch(req: EmulatorActionRequest) -> JSONResponse:
 
 @app.post("/api/games/install")
 async def api_games_install(req: EmulatorActionRequest) -> JSONResponse:
-    res = state.gaming.install_emulator(req.emulator_id)
+    res = await asyncio.to_thread(state.gaming.install_emulator, req.emulator_id)
     return JSONResponse(res)
 
 
@@ -464,19 +593,24 @@ async def api_games_upload_rom(req: RomUploadRequest) -> JSONResponse:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Base64 inválido: {exc}") from exc
 
-    res = state.gaming.save_and_push_rom(req.system, req.filename, content)
+    res = await asyncio.to_thread(
+        state.gaming.save_and_push_rom, req.system, req.filename, content
+    )
     return JSONResponse(res)
 
 
 @app.post("/api/games/install-pack")
 async def api_games_install_pack(req: RomPackInstallRequest) -> JSONResponse:
-    res = state.gaming.install_rom_pack(req.pack_id)
+    res = await asyncio.to_thread(state.gaming.install_rom_pack, req.pack_id)
     return JSONResponse(res)
 
 
 @app.post("/api/games/launch-rom")
 async def api_games_launch_rom(req: RomLaunchRequest) -> JSONResponse:
-    res = state.gaming.launch_rom(req.system, req.filename)
+    state.android.touch_activity(wake_if_standby=True)
+    res = await asyncio.to_thread(
+        state.gaming.launch_rom, req.system, req.filename
+    )
     if res.get("ok"):
         state.mode = "games"
         await broadcast_state()
@@ -486,41 +620,44 @@ async def api_games_launch_rom(req: RomLaunchRequest) -> JSONResponse:
 @app.get("/api/games/controllers")
 async def api_games_controllers_get() -> JSONResponse:
     host_label = os.environ.get("HYBRIDBOX_PUBLIC_HOST", "hybridbox.local")
-    res = state.gaming.get_controllers_config(host_ip=host_label)
+    res = await asyncio.to_thread(state.gaming.get_controllers_config, host_label)
     return JSONResponse(res)
 
 
 @app.post("/api/games/controllers")
 async def api_games_controllers_manage(req: ControllerManageRequest) -> JSONResponse:
     host_label = os.environ.get("HYBRIDBOX_PUBLIC_HOST", "hybridbox.local")
-    res = state.gaming.manage_controllers(
-        action=req.action,
-        payload={
+    res = await asyncio.to_thread(
+        state.gaming.manage_controllers,
+        req.action,
+        {
             "controller_id": req.controller_id,
             "skin_id": req.skin_id,
             "player": req.player,
             "name": req.name,
         },
-        host_ip=host_label,
+        host_label,
     )
     return JSONResponse(res)
 
 
 @app.get("/api/bluetooth/status")
 async def api_bluetooth_status() -> JSONResponse:
-    res = state.gaming.get_bluetooth_status()
+    res = await asyncio.to_thread(state.gaming.get_bluetooth_status)
     return JSONResponse(res)
 
 
 @app.post("/api/bluetooth/scan")
 async def api_bluetooth_scan(req: BluetoothScanRequest) -> JSONResponse:
-    res = state.gaming.scan_bluetooth_devices(open_rarely_used=req.open_rarely_used)
+    res = await asyncio.to_thread(
+        state.gaming.scan_bluetooth_devices, req.open_rarely_used
+    )
     return JSONResponse(res)
 
 
 @app.post("/api/bluetooth/pair")
 async def api_bluetooth_pair(req: BluetoothPairRequest) -> JSONResponse:
-    res = state.gaming.pair_or_connect_device(req.target)
+    res = await asyncio.to_thread(state.gaming.pair_or_connect_device, req.target)
     return JSONResponse(res)
 
 
@@ -529,25 +666,27 @@ async def api_bluetooth_pair(req: BluetoothPairRequest) -> JSONResponse:
 
 @app.get("/api/ssh/status")
 async def api_ssh_status() -> JSONResponse:
-    res = state.ssh_terminal.get_ssh_status()
+    res = await asyncio.to_thread(state.ssh_terminal.get_ssh_status)
     return JSONResponse(res)
 
 
 @app.post("/api/ssh/exec")
 async def api_ssh_exec(req: SshExecRequest) -> JSONResponse:
-    res = state.ssh_terminal.execute_command(req.command, target=req.target)
+    res = await asyncio.to_thread(
+        state.ssh_terminal.execute_command, req.command, req.target
+    )
     return JSONResponse(res)
 
 
 @app.post("/api/ssh/sync-wifi")
 async def api_ssh_sync_wifi() -> JSONResponse:
-    res = state.ssh_terminal.sync_update_over_wifi()
+    res = await asyncio.to_thread(state.ssh_terminal.sync_update_over_wifi)
     return JSONResponse(res)
 
 
 @app.post("/api/ssh/open-laptop")
 async def api_ssh_open_laptop() -> JSONResponse:
-    res = state.ssh_terminal.open_laptop_ssh_terminal()
+    res = await asyncio.to_thread(state.ssh_terminal.open_laptop_ssh_terminal)
     return JSONResponse(res)
 
 
@@ -557,6 +696,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     state.clients.add(ws)
     try:
         bat = state.android.get_battery_and_health()
+        standby_info = state.android.get_standby_state()
         await ws.send_text(
             json.dumps(
                 {
@@ -566,6 +706,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     "android_backend": state.android.backend_name,
                     "phone_online": bat.get("phone_online", True),
                     "battery": bat,
+                    "standby_mode": state.android.standby_mode,
+                    "standby": standby_info,
                 }
             )
         )
@@ -576,6 +718,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
             if msg_type == "ping":
                 bat_now = state.android.get_battery_and_health()
+                standby_now = state.android.get_standby_state()
                 await ws.send_text(
                     json.dumps(
                         {
@@ -583,26 +726,54 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                             "ts": msg.get("ts", time.time()),
                             "phone_online": bat_now.get("phone_online", True),
                             "battery": bat_now,
+                            "standby_mode": state.android.standby_mode,
+                            "standby": standby_now,
                         }
                     )
                 )
                 continue
 
+            if msg_type == "standby":
+                raw_standby = msg.get("standby")
+                auto_mins = msg.get("auto_standby_minutes")
+                if raw_standby is None and auto_mins is not None:
+                    state.android.auto_standby_minutes = max(0, int(auto_mins))
+                    state.android._save_runtime_cache(
+                        auto_standby_minutes=state.android.auto_standby_minutes
+                    )
+                else:
+                    target_standby = (
+                        (not state.android.standby_mode)
+                        if raw_standby is None
+                        else bool(raw_standby)
+                    )
+                    res = await asyncio.to_thread(
+                        state.android.set_standby_mode,
+                        target_standby,
+                        str(msg.get("reason") or "manual"),
+                        int(auto_mins) if auto_mins is not None else None,
+                    )
+                    if not res.get("standby_mode"):
+                        state.mode = "tv"
+                await broadcast_state()
+                continue
+
             if msg_type == "mode":
                 target = msg.get("mode", "tv")
-                apply_mode_switch(target)
+                await asyncio.to_thread(apply_mode_switch, target)
                 await broadcast_state()
                 continue
 
             if msg_type == "launch":
                 app_id = msg.get("app_id", "")
                 if app_id:
-                    execute_app_launch(app_id)
+                    await asyncio.to_thread(execute_app_launch, app_id)
                     await broadcast_state()
                 continue
 
             # Roteamento inteligente de eventos de acordo com o modo ativo (ou override explícito)
             target_mode = msg.get("target") or state.mode
+            state.android.touch_activity(wake_if_standby=True)
 
             if msg_type == "move":
                 dx = float(msg.get("dx", 0.0))
@@ -639,26 +810,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     state.android.scroll(dx=dx, dy=dy)
 
             elif msg_type == "dpad":
-                # D-Pad e teclas de mídia sempre funcionam no Android TV;
-                # no modo Games acionam o D-Pad do emulador; no Linux Desktop convertem setas/Enter/Esc
                 key = str(msg.get("key", ""))
-                if key in ("VOL_UP", "VOL_DOWN", "MUTE", "PLAY_PAUSE", "PREV", "NEXT"):
-                    state.android.send_key(key)
-                elif target_mode == "games" and key in ("UP", "DOWN", "LEFT", "RIGHT", "OK"):
-                    state.android.send_gamepad_key(key)
-                elif target_mode == "linux":
-                    linux_dpad_map = {
-                        "UP": "Up",
-                        "DOWN": "Down",
-                        "LEFT": "Left",
-                        "RIGHT": "Right",
-                        "OK": "Return",
-                        "BACK": "Escape",
-                        "HOME": "Super_L",
-                    }
-                    state.x11.send_key(linux_dpad_map.get(key, key))
-                else:
-                    state.android.send_key(key)
+                dispatch_dpad_key(key, target_mode)
 
             elif msg_type == "gamepad":
                 key = str(msg.get("key", ""))

@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png" />
   <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png" />
   <title>HybridBox Remote PWA</title>
-  <link rel="stylesheet" href="/static/styles.css?v=23" />
+  <link rel="stylesheet" href="/static/styles.css?v=24" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -39,6 +39,9 @@
       </div>
 
       <div class="top-actions">
+        <button id="btnStandbySwitch" class="icon-btn standby-switch-btn awake" type="button" title="Power / Eco-Standby Switch (Tap to Hibernate or Wake)" aria-label="Power / Eco-Standby Switch" aria-pressed="true">
+          <span class="standby-power-glyph">⏻</span>
+        </button>
         <button id="btnProjectorOpen" class="icon-btn projector-top-btn" type="button" title="TV, Projector &amp; Portable Wi-Fi" aria-label="TV, Projector &amp; Portable Wi-Fi">
           📽️
         </button>
@@ -50,6 +53,51 @@
         </button>
       </div>
     </header>
+
+    <!-- ECO-STANDBY / HIBERNATION OVERLAY (POWER SWITCH TO WAKE & RETURN TO MAIN SCREEN) -->
+    <section id="standbyOverlay" class="standby-overlay hidden" aria-live="polite">
+      <div class="standby-card">
+        <div class="standby-badge">
+          <span class="standby-badge-dot"></span>
+          <span id="standbyBadgeText">🌙 ECO-STANDBY • BATTERY SAVER ACTIVE</span>
+        </div>
+
+        <h2 class="standby-title">HybridBox in Hibernation</h2>
+        <p id="standbySubtitle" class="standby-subtitle">
+          Screen, GPU &amp; X11 are sleeping to save battery while not in use. Wi-Fi Low-Latency remains 100% online.
+        </p>
+
+        <!-- Tactile Power Toggle Switch (Interruptor ON/OFF) -->
+        <button id="btnStandbyWakeSwitch" class="standby-power-rocker" type="button" aria-label="Wake Up HybridBox and go to Main Screen">
+          <span class="rocker-glow-ring"></span>
+          <span class="rocker-icon">⏻</span>
+          <span class="rocker-state-pill">
+            <span class="rocker-off active">SLEEP</span>
+            <span class="rocker-on">WAKE ON</span>
+          </span>
+        </button>
+        <div class="standby-switch-hint">
+          Tap the <strong>Power Switch</strong> to wake up immediately &amp; open the Main TV Screen
+        </div>
+
+        <div id="standbyTelemetryBox" class="standby-telemetry-box">
+          <span id="standbyBatteryLabel">⚡ Battery: Checking...</span>
+          <span class="standby-sep">•</span>
+          <span id="standbyNetLabel">🟢 Wi-Fi Ready</span>
+        </div>
+
+        <div class="standby-timer-section">
+          <div class="standby-timer-label">⏱️ Auto-Hibernate after inactivity (TV, Linux or Games):</div>
+          <div id="standbyTimerPills" class="standby-timer-pills">
+            <button type="button" class="standby-timer-pill" data-standby-mins="5">5 min</button>
+            <button type="button" class="standby-timer-pill active" data-standby-mins="15">15 min</button>
+            <button type="button" class="standby-timer-pill" data-standby-mins="30">30 min</button>
+            <button type="button" class="standby-timer-pill" data-standby-mins="60">60 min</button>
+            <button type="button" class="standby-timer-pill" data-standby-mins="0">Off</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- SMART RECOVERY BANNER: XIAOMI OFFLINE / OUT OF BATTERY / LOW BATTERY ALERT -->
     <section id="offlineRecoveryBanner" class="offline-recovery-banner hidden" aria-live="polite">
@@ -115,6 +163,7 @@
 
     <!-- TOP QUICK LAUNCH STRIP -->
     <section class="quick-launch-strip">
+      <button id="btnQuickStandby" class="quick-chip standby-quick-chip" type="button">⏻ Eco-Standby</button>
       <button id="btnQuickProjector" class="quick-chip projector-chip" type="button">📽️ Projector</button>
       <button id="btnQuickWifi" class="quick-chip wifi-portable-chip" type="button">📡 Portable Wi-Fi</button>
       <button id="btnQuickBrowser" class="quick-chip ssh-chip" type="button" data-launch="browser">🌐 Linux Browser</button>
@@ -942,6 +991,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=23"></script>
+  <script src="/static/app.js?v=24"></script>
 </body>
 </html>

@@ -199,6 +199,14 @@ class AndroidController:
         self._last_battery_ts: float = 0.0
         self._cached_battery: Dict[str, Any] = {}
         self._bounds_syncing: bool = False
+        self.standby_mode: bool = os.path.exists("/data/local/tmp/hb_standby_mode")
+        self.standby_reason: str = "boot" if self.standby_mode else ""
+        self.standby_since_ts: float = time.time() if self.standby_mode else 0.0
+        try:
+            self.auto_standby_minutes: int = max(0, int(cache.get("auto_standby_minutes", 15)))
+        except Exception:
+            self.auto_standby_minutes = 15
+        self.last_activity_ts: float = time.time()
         if self.ssh_host == "hybridbox.local" or not (
             self._tcp_open(self.ssh_host, self.ssh_port, 0.25)
             or self._tcp_open(self.ssh_host, 5555, 0.25)
@@ -208,6 +216,9 @@ class AndroidController:
             self.discover_ssh_user()
         self._connect()
         self.sync_screen_bounds(force=True)
+        threading.Thread(
+            target=self._battery_and_standby_loop, daemon=True
+        ).start()
         if os.name == "nt":
             threading.Thread(
                 target=self._keepalive_watchdog_loop, daemon=True
@@ -963,8 +974,48 @@ class AndroidController:
         except Exception:
             return None
 
+    @staticmethod
+    def _run_local_bridge_socket(shell_cmd: str, timeout: float = 3.0) -> Optional[str]:
+        """Fast-path (<2ms) para execução privilegiada uid=2000(shell) via socket TCP local 127.0.0.1:5558."""
+        try:
+            with socket.create_connection(("127.0.0.1", 5558), timeout=min(1.0, timeout)) as s:
+                s.settimeout(timeout)
+                s.sendall((shell_cmd.strip() + "\n").encode("utf-8"))
+                chunks: List[bytes] = []
+                while True:
+                    data = s.recv(4096)
+                    if not data:
+                        break
+                    chunks.append(data)
+                return b"".join(chunks).decode("utf-8", errors="ignore")
+        except Exception:
+            return None
+
     def run_adb_shell(self, shell_cmd: str, timeout: float = 5.0, include_stderr: bool = False) -> str:
-        """Executa `adb -s <active_serial> shell <cmd>`; se USB estiver desligado, faz fallback automático via Wi-Fi SSH."""
+        """Executa comando privilegiado via socket local 5558 (no Termux), `adb -s <serial> shell` ou Wi-Fi SSH."""
+        # 0. Fast-path <2ms quando rodando dentro do Termux no próprio Xiaomi (evita bloqueio do adb/ssh)
+        if os.path.exists("/data/data/com.termux"):
+            fast_out = self._run_local_bridge_socket(shell_cmd, timeout=min(timeout, 3.5))
+            if fast_out is not None:
+                return fast_out
+            if os.path.exists("/data/data/com.termux/files/usr/bin/hb-shell"):
+                try:
+                    proc = subprocess.run(
+                        ["/data/data/com.termux/files/usr/bin/hb-shell", shell_cmd],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=timeout,
+                    )
+                    out = proc.stdout or ""
+                    if include_stderr and proc.stderr:
+                        out += proc.stderr
+                    if out or proc.returncode == 0:
+                        return out
+                except Exception:
+                    pass
+
         res = self.run_adb_cmd(["shell", shell_cmd], timeout=timeout)
         if res is not None and not (
             "device '" in (res.stderr or "") and "not found" in (res.stderr or "")
@@ -1017,7 +1068,11 @@ class AndroidController:
         return ""
 
     def _connect(self) -> None:
-        """Tenta abrir shell persistente via `adb shell` (USB) ou `ssh -p 8022` (Wi-Fi SSH)."""
+        """Tenta abrir canal de comando via Bridge 5558 (no Termux), `adb shell` (USB/TCP) ou `ssh -p 8022`."""
+        if os.path.exists("/data/data/com.termux") and self._tcp_open("127.0.0.1", 5558, 0.25):
+            self._backend_type = "android-bridge-5558"
+            return
+
         adb_bin = self._find_adb()
         if adb_bin:
             try:
@@ -1094,10 +1149,32 @@ class AndroidController:
         return self._backend_type
 
     def is_connected(self) -> bool:
+        if self._backend_type == "android-bridge-5558":
+            return True
         return self._proc is not None and self._proc.poll() is None
 
+    def touch_activity(self, wake_if_standby: bool = False) -> None:
+        """Registra atividade recente do usuário (reinicia o contador de auto-hibernação)."""
+        self.last_activity_ts = time.time()
+        if wake_if_standby and self.standby_mode:
+            threading.Thread(
+                target=self.set_standby_mode,
+                kwargs={"standby": False, "reason": "user_activity"},
+                daemon=True,
+            ).start()
+
     def send_raw_command(self, cmd: str) -> None:
-        """Envia comando shell diretamente para o pipe persistente sem criar novo processo."""
+        """Envia comando shell diretamente para o daemon 5558 (no Termux) ou pipe persistente sem bloquear."""
+        self.last_activity_ts = time.time()
+        if os.path.exists("/data/data/com.termux"):
+            cleaned_local = re.sub(r"\brun-as\s+com\.termux\s+", "", cmd)
+            threading.Thread(
+                target=self._run_local_bridge_socket,
+                args=(cleaned_local, 2.5),
+                daemon=True,
+            ).start()
+            return
+
         with self._lock:
             if not self.is_connected():
                 self._connect()
@@ -1351,21 +1428,130 @@ class AndroidController:
             "fi) &"
         )
 
+    def get_standby_state(self) -> Dict[str, Any]:
+        """Retorna o estado atual do Modo de Hibernação / Economia de Bateria (Eco-Standby)."""
+        now = time.time()
+        return {
+            "standby_mode": bool(self.standby_mode),
+            "standby_reason": self.standby_reason,
+            "standby_since_ts": round(self.standby_since_ts, 1) if self.standby_since_ts else 0.0,
+            "auto_standby_minutes": int(self.auto_standby_minutes),
+            "idle_seconds": int(max(0.0, now - self.last_activity_ts)),
+        }
+
+    def _is_media_or_cast_active(self) -> bool:
+        """Verifica se há vídeo/áudio em reprodução ativa (ex: SmartTube, Stremio, Kodi) para não hibernar no meio de um filme."""
+        try:
+            out = self.run_adb_shell(
+                "dumpsys media_session 2>/dev/null | grep -E 'state=PlaybackState \\{state=3'",
+                timeout=1.8,
+            )
+            return bool(out and "state=3" in out)
+        except Exception:
+            return False
+
+    def set_standby_mode(
+        self,
+        standby: bool,
+        reason: str = "manual",
+        auto_standby_minutes: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Ativa ou desativa o Modo de Hibernação Inteligente (Eco-Standby):
+        - Quando `standby=True`:
+          1. Troca o WakeLock do HybridBoxBridge para `PARTIAL_WAKE_LOCK` (`__HB_STANDBY_ON__`), mantendo Wi-Fi Low-Latency e Servidor 8080 100% online;
+          2. Pausa mídia eventual, vai para a tela Home leve, reduz brilho para 0, congela processos gráficos X11 (`SIGSTOP`) e apaga a tela física (`KEYCODE_SLEEP`).
+        - Quando `standby=False`:
+          1. Restaura `SCREEN_BRIGHT_WAKE_LOCK` (`__HB_STANDBY_OFF__`) e acorda a tela (`KEYCODE_WAKEUP`);
+          2. Retoma processos X11 (`SIGCONT`) e abre a tela principal do app (`Projectivy Launcher` / modo `tv`).
+        """
+        if auto_standby_minutes is not None:
+            self.auto_standby_minutes = max(0, int(auto_standby_minutes))
+            self._save_runtime_cache(auto_standby_minutes=self.auto_standby_minutes)
+
+        now = time.time()
+        if standby:
+            self.standby_mode = True
+            self.standby_reason = reason or "manual"
+            if not self.standby_since_ts:
+                self.standby_since_ts = now
+            if os.path.exists("/data/data/com.termux"):
+                self._run_local_bridge_socket("__HB_STANDBY_ON__", timeout=1.5)
+            self.run_adb_shell(
+                "touch /data/local/tmp/hb_standby_mode 2>/dev/null; "
+                "input keyevent 127 >/dev/null 2>&1; "
+                "input keyevent 3 >/dev/null 2>&1; "
+                "settings put system screen_brightness_mode 0 >/dev/null 2>&1; "
+                "settings put system screen_brightness 0 >/dev/null 2>&1; "
+                "run-as com.termux /data/data/com.termux/files/usr/bin/pkill -STOP -f xfce4-session 2>/dev/null || true; "
+                "run-as com.termux /data/data/com.termux/files/usr/bin/pkill -STOP -f firefox 2>/dev/null || true; "
+                "input keyevent 223 >/dev/null 2>&1",
+                timeout=3.0,
+            )
+            msg = "🌙 Eco-Standby (Hibernation) activated! Screen & GPU sleeping while Wi-Fi remains 100% ready."
+        else:
+            self.standby_mode = False
+            self.standby_reason = ""
+            self.standby_since_ts = 0.0
+            self.last_activity_ts = now
+            if os.path.exists("/data/data/com.termux"):
+                self._run_local_bridge_socket("__HB_STANDBY_OFF__", timeout=1.5)
+            self.run_adb_shell(
+                "rm -f /data/local/tmp/hb_standby_mode 2>/dev/null; "
+                "run-as com.termux /data/data/com.termux/files/usr/bin/pkill -CONT -f xfce4-session 2>/dev/null || true; "
+                "run-as com.termux /data/data/com.termux/files/usr/bin/pkill -CONT -f firefox 2>/dev/null || true; "
+                "input keyevent 224 >/dev/null 2>&1; "
+                "wm dismiss-keyguard >/dev/null 2>&1; "
+                "am start --user 0 -n com.spocky.projengmenu/.ui.home.MainActivity >/dev/null 2>&1 || input keyevent 3 >/dev/null 2>&1",
+                timeout=3.0,
+            )
+            msg = "⚡ HybridBox Awake! Returned to the main TV Box screen."
+
+        if self._cached_battery:
+            self._cached_battery["standby_mode"] = self.standby_mode
+            self._cached_battery["standby"] = self.get_standby_state()
+
+        return {
+            "ok": True,
+            "standby_mode": self.standby_mode,
+            "standby": self.get_standby_state(),
+            "mode": "tv",
+            "message": msg,
+        }
+
+    def _battery_and_standby_loop(self) -> None:
+        """Thread em background que atualiza a bateria a cada 8s (sem bloquear o Uvicorn) e gerencia a auto-hibernação."""
+        while True:
+            try:
+                self._fetch_battery_and_health_sync()
+                if not self.standby_mode and self.auto_standby_minutes > 0:
+                    idle_sec = time.time() - self.last_activity_ts
+                    if idle_sec >= (self.auto_standby_minutes * 60):
+                        if not self._is_media_or_cast_active():
+                            self.set_standby_mode(True, reason="idle_timeout")
+                        else:
+                            # Enquanto houver vídeo/filme tocando, posterga o timer de inatividade
+                            self.last_activity_ts = time.time()
+            except Exception:
+                pass
+            time.sleep(8.0)
+
     def get_battery_and_health(self, force: bool = False) -> Dict[str, Any]:
         """
-        Retorna o status da bateria e conectividade real do Xiaomi Redmi Note 8 Pro:
-        - `phone_online`: True se o celular está ligado e acessível na rede/USB; False se desligou (0% bateria).
-        - `level`: 0..100 (%)
-        - `charging`: True se conectado ao carregador AC / USB / Wireless
-        - `power_source`: 'ac' | 'usb' | 'wireless' | 'battery' | 'offline'
-        - `temperature_c`: temperatura em °C
-        - `low_battery`: True se <= 20% e fora da tomada
-        - `critical_battery`: True se <= 12% e fora da tomada
-        - `status_text`: ex: '⚡ 86%' ou '🔋 64%' ou '🪫 14%' ou '🔌 Desligado'
+        Retorna o status da bateria, conectividade e Eco-Standby do Xiaomi Redmi Note 8 Pro.
+        Quando `force=False` e o cache em background está quente (<30s), responde em <0.1ms sem bloquear o loop HTTP/WS.
         """
         now = time.time()
-        if not force and self._cached_battery and (now - self._last_battery_ts < 12.0):
-            return self._cached_battery
+        if not force and self._cached_battery and (now - self._last_battery_ts < 30.0):
+            cached = dict(self._cached_battery)
+            cached["standby_mode"] = self.standby_mode
+            cached["standby"] = self.get_standby_state()
+            return cached
+        return self._fetch_battery_and_health_sync()
+
+    def _fetch_battery_and_health_sync(self) -> Dict[str, Any]:
+        """Coleta síncrona da telemetria de bateria (executada pela thread em background ou quando `force=True`)."""
+        now = time.time()
 
         raw = ""
         phone_online = False
@@ -1434,6 +1620,8 @@ class AndroidController:
                     "The Xiaomi Redmi Note 8 Pro is not responding on Wi-Fi or USB "
                     "(it likely drained its battery to 0% and powered off)."
                 ),
+                "standby_mode": self.standby_mode,
+                "standby": self.get_standby_state(),
             }
             self._cached_battery = res_offline
             self._last_battery_ts = now
@@ -1476,6 +1664,8 @@ class AndroidController:
             "critical_battery": critical_battery,
             "status_text": status_text,
             "offline_reason": "",
+            "standby_mode": self.standby_mode,
+            "standby": self.get_standby_state(),
         }
         self._cached_battery = res
         self._last_battery_ts = now

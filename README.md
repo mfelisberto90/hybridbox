@@ -45,12 +45,12 @@ Browse **53+ SNES, NeoGeo/Arcade, and Sega Mega Drive** ROM covers to launch gam
   <img src="docs/screenshots/07-games-landscape-arcade-hud.png" alt="HybridBox Fullscreen Landscape Arcade 6-Button Fightstick HUD" width="820" />
 </p>
 
-### 4. 📽️ Any TV / Projector, 📡 Portable Travel Wi-Fi & 🔋 0% Battery Recovery
-Zero-touch wireless **Projector** (Miracast / DLNA / HDMI DisplayLink) auto-connection, **Portable Travel Wi-Fi** with automatic **Rescue Hotspot (`HybridBox` / `hybridbox123`)**, and live Xiaomi battery telemetry with **Plug & Revive** instructions:
+### 4. 📽️ Any TV / Projector, 📡 Portable Travel Wi-Fi, 🌙 Eco-Standby Switch & 🔋 0% Battery Recovery
+Zero-touch wireless **Projector** (Miracast / DLNA / HDMI DisplayLink) auto-connection, **Portable Travel Wi-Fi** with automatic **Rescue Hotspot (`HybridBox` / `hybridbox123`)**, **Smart Eco-Standby / Hibernation Power Switch (`⏻`)**, and live Xiaomi battery telemetry with **Plug & Revive** instructions:
 
-| 📽️ Any TV or Projector Auto-Connect | 📡 Portable Wi-Fi & Rescue Hotspot | ⚡ Live Battery & 0% Recovery Guide |
-| :---: | :---: | :---: |
-| <img src="docs/screenshots/09-projector-tv-modal.png" alt="HybridBox Any TV or Projector Modal" width="260" /> | <img src="docs/screenshots/10-portable-wifi-travel-modal.png" alt="HybridBox Portable Wi-Fi and Rescue Hotspot Modal" width="260" /> | <img src="docs/screenshots/11-battery-recovery-guide.png" alt="HybridBox Live Battery Telemetry and Recovery Guide" width="260" /> |
+| 📽️ Any TV or Projector Auto-Connect | 📡 Portable Wi-Fi & Rescue Hotspot | 🌙 Smart Eco-Standby & Power Switch (`⏻`) | ⚡ Live Battery & 0% Recovery Guide |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/09-projector-tv-modal.png" alt="HybridBox Any TV or Projector Modal" width="210" /> | <img src="docs/screenshots/10-portable-wifi-travel-modal.png" alt="HybridBox Portable Wi-Fi and Rescue Hotspot Modal" width="210" /> | <img src="docs/screenshots/12-eco-standby-hibernation-switch.png" alt="HybridBox Smart Eco-Standby Hibernation Power Switch" width="210" /> | <img src="docs/screenshots/11-battery-recovery-guide.png" alt="HybridBox Live Battery Telemetry and Recovery Guide" width="210" /> |
 
 ---
 
@@ -93,10 +93,11 @@ Turning a phone with a broken screen into a zero-touch console required solving 
 1. **Kernel-Level Ghost-Touch Blocker (`scripts/grab_ghost_touch.c`)**:
    - Cracked screens often send continuous phantom touches that click random buttons. Because Android's `adb shell` user (`uid=2000`) belongs to the `input` group (`gid=1004`), we wrote a lightweight C daemon (`grab_ghost_touch.c`) that opens `/dev/input/event2` (`NVTCapacitiveTouchScreen`), releases all stuck multi-touch slots (`ABS_MT_TRACKING_ID = -1`), and calls `ioctl(fd, EVIOCGRAB, 1)`.
    - This **blocks 100% of physical ghost touches** from the broken screen at the Linux kernel level while keeping synthetic touches (`input tap`), Bluetooth gamepads, and X11 mouse control working at 100%!
-2. **Sub-5ms Privileged Android Bridge Without Root (`backend/HybridBoxBridge.java`)**:
-   - Running a new `adb shell` process per button press has ~200ms latency. We wrote `HybridBoxBridge.java` (compiled to `backend/hybridbox_bridge.jar`), which runs via `/system/bin/app_process` on port `5558` as `uid=2000 (shell)`. It holds a permanent system `PARTIAL_WAKE_LOCK` via `IPowerManager` and executes shell commands in `<5ms` via `scripts/hb-shell`.
-3. **24/7 Twin Watchdogs (`scripts/keep_awake.sh` & `scripts/hb_system_watchdog.sh`)**:
-   - Prevents Android 11+ *Phantom Process Killer*, *Doze Mode*, and *MIUI Battery Saver* from ever killing Termux, OpenSSH (`8022`), Termux:X11 (`:0`), or the FastAPI server (`8080`). When unplugged from power, it automatically turns the broken screen's physical backlight down to `0` to save battery while keeping wireless projection running.
+2. **Sub-2ms Privileged Android Bridge + Wi-Fi Low-Latency Lock (`backend/HybridBoxBridge.java`)**:
+   - Running a new `adb shell` process per button press has ~200ms latency. We wrote `HybridBoxBridge.java` (compiled to `backend/hybridbox_bridge.jar`), which runs via `/system/bin/app_process` on port `5558` as `uid=2000 (shell)`. It holds a permanent system `WakeLock` via `IPowerManager`, acquires Android's `WIFI_MODE_FULL_LOW_LATENCY` (`type=4`), `WIFI_MODE_FULL_HIGH_PERF` (`type=3`), and `MulticastLock` via `IWifiManager` so MediaTek/Qualcomm Wi-Fi drivers never enter WMM-PS power-save sleep, and executes shell commands in `<2ms` via direct TCP socket (`127.0.0.1:5558`).
+3. **24/7 Twin Watchdogs + Smart Eco-Standby / Hibernation Switch (`scripts/keep_awake.sh`, `scripts/hb_system_watchdog.sh` & `/api/system/standby`)**:
+   - Neutralizes Android 11+ *Phantom Process Killer*, *Doze Mode*, and Xiaomi *PowerKeeper* (`com.miui.powerkeeper`) / *Joyose* (`com.xiaomi.joyose`) background restrictions via `appops` and `netpolicy` whitelisting, and keeps LAN ARP caches warm every 4 seconds.
+   - Includes a **Smart Eco-Standby / Hibernation Mode**: after `X` minutes of idle time (`5 / 15 / 30 / 60 min`, without interrupting active video playback), or when tapping the **Power Switch (`⏻`)** in the Topbar, HybridBox switches `HybridBoxBridge` to `PARTIAL_WAKE_LOCK` (`__HB_STANDBY_ON__`), turns off the physical screen and GPU, and pauses X11 processes (`SIGSTOP`) while keeping Wi-Fi Low-Latency and FastAPI (`8080`) 100% online. Tapping the **Power Switch (`⏻`)** wakes the phone in `<200ms` and returns directly to the **Main TV Box screen**!
 4. **Hands-Free Connection to Any TV or `Projector` (`backend/projector_controller.py`)**:
    - Tapping **"📡 Scan Any TV or Projector"** in the PWA wakes the display pipeline, opens Android's Wireless Display / Miracast settings, reads the screen list via `uiautomator dump`, taps your **Projector** or **Smart TV** automatically, and auto-confirms the *"Start now / Accept"* dialog without touching the phone.
 5. **Portable Travel Wi-Fi, mDNS (`http://hybridbox.local:8080`), Zero-Config Auto-Discovery & Rescue Hotspot**:

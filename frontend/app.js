@@ -22,6 +22,10 @@
     controllersList: [],
     ws: null,
     connected: false,
+    consecutiveOfflineFailures: 0,
+    standbyMode: false,
+    autoStandbyMinutes: 15,
+    standbyReason: "",
     apps: [],
     sensitivity: 1.65,
     scrollSensitivity: 0.45,
@@ -183,7 +187,7 @@
     }
   }
 
-  // Unified Status & Battery Pill + Offline Recovery Elements (v21)
+  // Unified Status & Battery Pill + Offline Recovery + Eco-Standby Switch Elements (v24)
   const batteryPill = document.getElementById("batteryPill");
   const offlineRecoveryBanner = document.getElementById("offlineRecoveryBanner");
   const offlineBannerTitle = document.getElementById("offlineBannerTitle");
@@ -192,15 +196,190 @@
   const btnReviveNow = document.getElementById("btnReviveNow");
   const btnToggleOfflineGuide = document.getElementById("btnToggleOfflineGuide");
   const offlineGuideSteps = document.getElementById("offlineGuideSteps");
+  const btnStandbySwitch = document.getElementById("btnStandbySwitch");
+  const btnQuickStandby = document.getElementById("btnQuickStandby");
+  const standbyOverlay = document.getElementById("standbyOverlay");
+  const btnStandbyWakeSwitch = document.getElementById("btnStandbyWakeSwitch");
+  const standbySubtitle = document.getElementById("standbySubtitle");
+  const standbyBatteryLabel = document.getElementById("standbyBatteryLabel");
+  const standbyNetLabel = document.getElementById("standbyNetLabel");
+  const standbyTimerPills = document.getElementById("standbyTimerPills");
   let offlineBannerDismissedUntil = 0;
+  let wsReconnectTimer = null;
 
-  function updateBatteryAndHealthUI(battery, wsConnected = clientState.connected) {
+  function updateStandbyUI(standbyInfo, fallbackBool) {
+    const isStandby =
+      standbyInfo && typeof standbyInfo.standby_mode === "boolean"
+        ? standbyInfo.standby_mode
+        : typeof fallbackBool === "boolean"
+        ? fallbackBool
+        : Boolean(clientState.standbyMode);
+
+    clientState.standbyMode = isStandby;
+    if (standbyInfo) {
+      if (standbyInfo.auto_standby_minutes != null) {
+        clientState.autoStandbyMinutes = Number(standbyInfo.auto_standby_minutes);
+      }
+      if (typeof standbyInfo.standby_reason === "string") {
+        clientState.standbyReason = standbyInfo.standby_reason;
+      }
+    }
+
+    if (btnStandbySwitch) {
+      btnStandbySwitch.classList.toggle("sleeping", isStandby);
+      btnStandbySwitch.classList.toggle("awake", !isStandby);
+      btnStandbySwitch.setAttribute("aria-pressed", isStandby ? "false" : "true");
+      btnStandbySwitch.title = isStandby
+        ? "🌙 Eco-Standby Active (Tap Power Switch to Wake Up & Return to Main Screen)"
+        : "⚡ System ON (Tap Power Switch to Enter Eco-Standby / Battery Saver)";
+    }
+
+    if (btnQuickStandby) {
+      btnQuickStandby.classList.toggle("sleeping", isStandby);
+      btnQuickStandby.textContent = isStandby ? "🌙 Wake Up" : "⏻ Eco-Standby";
+    }
+
+    if (standbyOverlay) {
+      standbyOverlay.classList.toggle("hidden", !isStandby);
+    }
+
+    if (standbySubtitle) {
+      if (clientState.standbyReason === "idle_timeout") {
+        standbySubtitle.textContent = `Entered Eco-Standby automatically after ${
+          clientState.autoStandbyMinutes || 15
+        } min of inactivity. Screen, GPU & X11 are sleeping to save battery while Wi-Fi stays 100% ready.`;
+      } else {
+        standbySubtitle.textContent =
+          "Screen, GPU & X11 are sleeping to save battery while not in use. Wi-Fi Low-Latency remains 100% online.";
+      }
+    }
+
+    if (standbyTimerPills) {
+      standbyTimerPills.querySelectorAll("[data-standby-mins]").forEach((btn) => {
+        const mins = Number(btn.getAttribute("data-standby-mins"));
+        btn.classList.toggle("active", mins === clientState.autoStandbyMinutes);
+      });
+    }
+  }
+
+  async function setStandbyMode(targetStandby, reason = "manual") {
+    vibrate(22);
+    const desired = typeof targetStandby === "boolean" ? targetStandby : !clientState.standbyMode;
+
+    if (!desired) {
+      // Waking from Eco-Standby -> immediately navigate to the Main Screen (TV Box mode)
+      if (btnStandbyWakeSwitch) {
+        btnStandbyWakeSwitch.classList.add("waking");
+        setTimeout(() => btnStandbyWakeSwitch.classList.remove("waking"), 450);
+      }
+      clientState.urlModeLocked = false;
+      if (clientState.fullscreenLandscape && typeof setGamepadFullscreenLandscape === "function") {
+        setGamepadFullscreenLandscape(false);
+      }
+      ["appsModal", "projectorModal", "moreControllersModal", "hudGameDrawer"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add("hidden");
+      });
+      clientState.mode = "tv";
+      clientState.tvSubTab = "dpad";
+      if (tabTvDpad) tabTvDpad.classList.add("active");
+      if (tabTvCursor) tabTvCursor.classList.remove("active");
+      renderModeUI();
+    }
+
+    updateStandbyUI(
+      {
+        standby_mode: desired,
+        standby_reason: reason,
+        auto_standby_minutes: clientState.autoStandbyMinutes,
+      },
+      desired
+    );
+
+    sendWs({ type: "standby", standby: desired, reason });
+    try {
+      const res = await fetch("/api/system/standby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ standby: desired, reason }),
+      });
+      const data = await res.json();
+      if (data && data.standby) {
+        updateStandbyUI(data.standby, data.standby_mode);
+      }
+      if (!desired && data && data.mode) {
+        clientState.mode = "tv";
+        renderModeUI();
+      }
+    } catch (_) {}
+  }
+
+  async function setAutoStandbyMinutes(minutes) {
+    vibrate(14);
+    const mins = Math.max(0, Number(minutes) || 0);
+    clientState.autoStandbyMinutes = mins;
+    updateStandbyUI(
+      {
+        standby_mode: clientState.standbyMode,
+        standby_reason: clientState.standbyReason,
+        auto_standby_minutes: mins,
+      },
+      clientState.standbyMode
+    );
+    sendWs({ type: "standby", auto_standby_minutes: mins });
+    try {
+      await fetch("/api/system/standby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auto_standby_minutes: mins }),
+      });
+    } catch (_) {}
+  }
+
+  if (btnStandbySwitch) {
+    btnStandbySwitch.addEventListener("click", () => {
+      setStandbyMode(!clientState.standbyMode, "manual_topbar_switch");
+    });
+  }
+
+  if (btnQuickStandby) {
+    btnQuickStandby.addEventListener("click", () => {
+      setStandbyMode(!clientState.standbyMode, "manual_quick_chip");
+    });
+  }
+
+  if (btnStandbyWakeSwitch) {
+    btnStandbyWakeSwitch.addEventListener("click", () => {
+      setStandbyMode(false, "manual_wake_switch");
+    });
+  }
+
+  if (standbyTimerPills) {
+    standbyTimerPills.querySelectorAll("[data-standby-mins]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mins = Number(btn.getAttribute("data-standby-mins"));
+        setAutoStandbyMinutes(mins);
+      });
+    });
+  }
+
+  function updateBatteryAndHealthUI(battery, wsConnected = clientState.connected, forceOfflineNow = false) {
     const phoneOnline = Boolean(wsConnected && (!battery || battery.phone_online !== false));
-    clientState.battery = battery || null;
+    if (battery) {
+      clientState.battery = battery;
+      if (battery.standby || typeof battery.standby_mode === "boolean") {
+        updateStandbyUI(battery.standby, battery.standby_mode);
+      }
+    }
 
     if (!phoneOnline) {
+      if (!forceOfflineNow && clientState.consecutiveOfflineFailures < 3) {
+        // Keep last known good status while fast reconnect / HTTP verification runs
+        return;
+      }
       if (statusDot) statusDot.className = "status-dot offline";
       if (statusText) statusText.textContent = "Offline";
+      if (standbyNetLabel) standbyNetLabel.textContent = "🔌 Reconnecting...";
       if (batteryPill) {
         batteryPill.className = "status-battery-pill offline";
         batteryPill.title = "Xiaomi Redmi Note 8 Pro is offline or out of battery (Tap for recovery guide)";
@@ -219,7 +398,9 @@
       return;
     }
 
+    clientState.consecutiveOfflineFailures = 0;
     if (statusDot) statusDot.className = "status-dot online";
+    if (standbyNetLabel) standbyNetLabel.textContent = "🟢 Wi-Fi Low-Latency Ready";
 
     if (battery) {
       const lvl = battery.level;
@@ -228,10 +409,14 @@
       const isLow = Boolean(battery.low_battery);
       const tempStr = battery.temperature_c != null ? ` • ${battery.temperature_c}°C` : "";
       const srcLabel = isChg ? "Charging on Cable" : "On Battery (Unplugged)";
-      const pillText =
+      const basePillText =
         battery.status_text || (lvl != null ? `${isChg ? "⚡" : isLow ? "🪫" : "🔋"} ${lvl}%` : "⚡ Online");
+      const pillText = clientState.standbyMode ? `🌙 ${lvl != null ? lvl + "%" : "Eco"}` : basePillText;
 
       if (statusText) statusText.textContent = pillText;
+      if (standbyBatteryLabel) {
+        standbyBatteryLabel.textContent = `${basePillText} (${isChg ? "Charging" : "Eco-Saving"})`;
+      }
       if (batteryPill) {
         batteryPill.className =
           "status-battery-pill" + (isChg ? " charging" : isCrit ? " critical" : isLow ? " low" : "");
@@ -319,6 +504,7 @@
         const res = await fetch("/api/system/revive", { method: "POST" });
         const data = await res.json();
         if (data.battery) {
+          clientState.consecutiveOfflineFailures = 0;
           updateBatteryAndHealthUI(data.battery, true);
         }
         if (offlineBannerDesc && data.message) {
@@ -340,31 +526,85 @@
     });
   }
 
-  // Periodic Xiaomi battery & health heartbeat every 12s
+  async function probeBackendHealth() {
+    if (document.visibilityState === "hidden") {
+      return;
+    }
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 2800) : null;
+    try {
+      const res = await fetch("/api/battery", {
+        cache: "no-store",
+        signal: ctrl ? ctrl.signal : undefined,
+      });
+      if (timer) clearTimeout(timer);
+      if (!res.ok) throw new Error("status not ok");
+      const d = await res.json();
+      if (d && d.standby) {
+        updateStandbyUI(d.standby, d.standby_mode);
+      }
+      if (d && d.battery && d.battery.phone_online !== false) {
+        clientState.consecutiveOfflineFailures = 0;
+        updateBatteryAndHealthUI(d.battery, true);
+        if (!clientState.ws || clientState.ws.readyState !== WebSocket.OPEN) {
+          connectWebSocket();
+        }
+        return;
+      }
+      clientState.consecutiveOfflineFailures += 1;
+      updateBatteryAndHealthUI(d ? d.battery : null, false);
+    } catch (_) {
+      if (timer) clearTimeout(timer);
+      clientState.consecutiveOfflineFailures += 1;
+      updateBatteryAndHealthUI(null, false);
+    }
+  }
+
+  // Periodic Xiaomi battery & health heartbeat every 8s
   setInterval(() => {
     if (!sendWs({ type: "ping", ts: Date.now() })) {
-      fetch("/api/battery")
-        .then((r) => r.json())
-        .then((d) => {
-          if (d && d.battery) updateBatteryAndHealthUI(d.battery, true);
-        })
-        .catch(() => {
-          updateBatteryAndHealthUI(null, false);
-        });
+      probeBackendHealth();
     }
-  }, 12000);
+  }, 8000);
+
+  // Instant Reconnect when unlocking the controller phone or returning to the PWA tab
+  function handleAppForegroundResume() {
+    if (document.visibilityState === "hidden") return;
+    clientState.consecutiveOfflineFailures = 0;
+    if (!clientState.ws || clientState.ws.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
+    }
+    probeBackendHealth();
+  }
+
+  document.addEventListener("visibilitychange", handleAppForegroundResume);
+  window.addEventListener("pageshow", handleAppForegroundResume);
+  window.addEventListener("online", handleAppForegroundResume);
 
   /**
-   * Connect to WebSocket with automatic reconnect
+   * Connect to WebSocket with automatic zero-flicker reconnect
    */
   function connectWebSocket() {
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = null;
+    }
+    if (
+      clientState.ws &&
+      (clientState.ws.readyState === WebSocket.OPEN ||
+        clientState.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${proto}//${window.location.host}/ws`;
     const ws = new WebSocket(wsUrl);
     clientState.ws = ws;
 
     ws.addEventListener("open", () => {
+      if (ws !== clientState.ws) return;
       clientState.connected = true;
+      clientState.consecutiveOfflineFailures = 0;
       if (statusDot) statusDot.className = "status-dot online";
       if (!clientState.battery && statusText) {
         statusText.textContent = "Online";
@@ -375,6 +615,10 @@
       try {
         const data = JSON.parse(event.data);
         if (data.type === "state" || data.type === "pong") {
+          clientState.consecutiveOfflineFailures = 0;
+          if (data.standby || typeof data.standby_mode === "boolean") {
+            updateStandbyUI(data.standby, data.standby_mode);
+          }
           if (data.battery) {
             updateBatteryAndHealthUI(data.battery, true);
           }
@@ -391,13 +635,19 @@
     });
 
     ws.addEventListener("close", () => {
+      if (ws !== clientState.ws) return;
+      clientState.ws = null;
       clientState.connected = false;
-      updateBatteryAndHealthUI(null, false);
-      setTimeout(connectWebSocket, 1800);
+      // Do NOT immediately flash the red Offline banner when a phone unlocks;
+      // verify via HTTP and reconnect immediately.
+      probeBackendHealth();
+      wsReconnectTimer = setTimeout(connectWebSocket, 900);
     });
 
     ws.addEventListener("error", () => {
-      ws.close();
+      try {
+        ws.close();
+      } catch (_) {}
     });
   }
 
@@ -406,9 +656,13 @@
    */
   async function loadInitialStatus() {
     try {
-      const res = await fetch("/api/status");
+      const res = await fetch("/api/status", { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
+      clientState.consecutiveOfflineFailures = 0;
+      if (data.standby || typeof data.standby_mode === "boolean") {
+        updateStandbyUI(data.standby, data.standby_mode);
+      }
       if (data.battery) {
         updateBatteryAndHealthUI(data.battery, true);
       }
@@ -421,7 +675,7 @@
         renderAppsGrid();
       }
     } catch (_) {
-      updateBatteryAndHealthUI(null, false);
+      probeBackendHealth();
     }
   }
 
@@ -524,6 +778,17 @@
     }
   }
 
+  function sendDpadCommand(key) {
+    if (!sendWs({ type: "dpad", key })) {
+      connectWebSocket();
+      fetch("/api/dpad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, target: clientState.mode }),
+      }).catch(() => {});
+    }
+  }
+
   document.querySelectorAll("[data-dpad]").forEach((btn) => {
     const key = btn.getAttribute("data-dpad");
     const repeatable = ["UP", "DOWN", "LEFT", "RIGHT", "VOL_UP", "VOL_DOWN"].includes(key);
@@ -531,12 +796,12 @@
     btn.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       vibrate(12);
-      sendWs({ type: "dpad", key });
+      sendDpadCommand(key);
       stopDpadRepeat();
       if (repeatable) {
         holdTimer = setTimeout(() => {
           repeatInterval = setInterval(() => {
-            sendWs({ type: "dpad", key });
+            sendDpadCommand(key);
           }, 110);
         }, 360);
       }

@@ -16,13 +16,30 @@ if [ -f "$LOCK" ]; then
 fi
 echo "$$" > "$LOCK"
 
-# Blindagem contra Doze Mode, Wi-Fi Sleep e Phantom Process Killer
+# Blindagem contra Doze Mode, Wi-Fi Sleep, MIUI PowerKeeper e Phantom Process Killer
 settings put global wifi_sleep_policy 2 2>/dev/null
+settings put global wifi_scan_throttle_enabled 0 2>/dev/null
 settings put global stay_on_while_plugged_in 7 2>/dev/null
 settings put system screen_off_timeout 2147483647 2>/dev/null
 settings put global settings_enable_monitor_phantom_procs false 2>/dev/null
 device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null
 dumpsys deviceidle disable 2>/dev/null
+
+# Neutraliza matança em background do com.miui.powerkeeper e com.xiaomi.joyose (sem desinstalar para evitar bootloop)
+for badpkg in com.miui.powerkeeper com.xiaomi.joyose; do
+  cmd appops set $badpkg WRITE_SETTINGS deny 2>/dev/null
+  cmd appops set $badpkg GET_USAGE_STATS deny 2>/dev/null
+  cmd appops set $badpkg RUN_IN_BACKGROUND deny 2>/dev/null
+  cmd appops set $badpkg RUN_ANY_IN_BACKGROUND deny 2>/dev/null
+  cmd appops set $badpkg WAKE_LOCK deny 2>/dev/null
+  appops set $badpkg 10008 deny 2>/dev/null
+done
+
+TERMUX_UID=$(stat -c %u /data/data/com.termux 2>/dev/null)
+if [ -n "$TERMUX_UID" ]; then
+  cmd netpolicy add restrict-background-whitelist "$TERMUX_UID" >/dev/null 2>&1
+fi
+
 for pkg in com.termux com.termux.boot com.termux.x11 com.termux.api com.spocky.projengmenu \
   com.explusalpha.Snes9xPlus com.explusalpha.NeoEmu com.explusalpha.MdEmu \
   com.swordfish.lemuroid com.seleuco.mame4d2024 com.seleuco.mame4droid; do

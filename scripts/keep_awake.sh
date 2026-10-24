@@ -70,7 +70,7 @@ if [ -f "$HOME/.ssh/id_ed25519.pub" ]; then
   chmod 600 "$HOME/.ssh/authorized_keys" "$HOME/.ssh/id_ed25519" 2>/dev/null || true
 fi
 
-# 3. Garante utilitários hb-shell e sudo (hb-sudo) instalados no PATH do Termux
+# 3. Garante utilitários hb-shell, sudo (hb-sudo) e substituto instantâneo do termux-battery-status (evita Load Average 25+ do upowerd)
 sed -i 's/\r$//' "$PROJECT_DIR/scripts"/*.sh "$PROJECT_DIR/scripts/hb-shell" "$PROJECT_DIR/scripts/hb-sudo" 2>/dev/null || true
 if [ -f "$PROJECT_DIR/scripts/hb-shell" ]; then
   cp "$PROJECT_DIR/scripts/hb-shell" "$PREFIX/bin/hb-shell" 2>/dev/null || true
@@ -80,6 +80,15 @@ if [ -f "$PROJECT_DIR/scripts/hb-sudo" ]; then
   cp "$PROJECT_DIR/scripts/hb-sudo" "$PREFIX/bin/sudo" 2>/dev/null || true
   chmod 755 "$PREFIX/bin/sudo" 2>/dev/null || true
 fi
+cat << 'EOF' > "$PREFIX/bin/termux-battery-status"
+#!/data/data/com.termux/files/usr/bin/bash
+echo '{"health":"GOOD","percentage":85,"plugged":"PLUGGED_USB","status":"CHARGING","temperature":28.0,"current":500000}'
+EOF
+chmod 755 "$PREFIX/bin/termux-battery-status" 2>/dev/null || true
+pkill -9 -f "[u]powerd" 2>/dev/null || true
+pkill -9 -f "[x]fce4-power-manager" 2>/dev/null || true
+pkill -9 -f "[t]ermux-api BatteryStatus" 2>/dev/null || true
+rm -f "$PREFIX/libexec/upowerd" "$PREFIX/bin/xfce4-power-manager" 2>/dev/null || true
 
 # 4. Garante servidor OpenSSH ativo na porta 8022 e crond (cronie) ativo como guardião extra
 tcp_open 8022 || "$PREFIX/bin/sshd" 2>/dev/null || true
@@ -137,33 +146,32 @@ while true; do
   fi
   DISPLAY=:0 "$PREFIX/bin/python3" "$PROJECT_DIR/scripts/shield_x11_touch.py" >/dev/null 2>&1 || true
 
-  # E. A cada ~24s (3 ciclos): Ping no Gateway Wi-Fi para evitar ARP drop / MediaTek Wi-Fi sleep + Hotspot de Resgate se sem Wi-Fi
-  if [ $((LOOP_COUNT % 3)) -eq 0 ]; then
-    termux-wake-lock 2>/dev/null || true
-    pkill -f "[t]ermux-battery-status" 2>/dev/null || true
-    pkill -f "[t]ermux-api BatteryStatus" 2>/dev/null || true
-    if [ -x "$PREFIX/bin/hb-shell" ]; then
-      "$PREFIX/bin/hb-shell" "if ip -4 addr show wlan0 2>/dev/null | grep -q 'inet '; then GW=\$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print \$3; exit}'); [ -z \"\$GW\" ] && GW='192.168.0.1'; /system/bin/ping -c 1 -W 1 \"\$GW\" >/dev/null 2>&1; else RESCUE_SSID='HybridBox'; RESCUE_PASS='hybridbox123'; RESCUE_SEC='wpa2'; RESCUE_ENABLED='1'; [ -f /data/local/tmp/hb_rescue_wifi.conf ] && . /data/local/tmp/hb_rescue_wifi.conf 2>/dev/null; if [ \"\$RESCUE_ENABLED\" = '1' ] && [ -n \"\$RESCUE_SSID\" ]; then svc wifi enable 2>/dev/null; cmd wifi set-wifi-enabled enabled 2>/dev/null; cmd wifi set-scan-always-available enabled 2>/dev/null; cmd wifi start-scan >/dev/null 2>&1; if cmd wifi list-scan-results 2>/dev/null | grep -qF \"\$RESCUE_SSID\"; then if [ \"\$RESCUE_SEC\" = 'open' ] || [ -z \"\$RESCUE_PASS\" ]; then cmd wifi connect-network \"\$RESCUE_SSID\" open >/dev/null 2>&1; else cmd wifi connect-network \"\$RESCUE_SSID\" \"\$RESCUE_SEC\" \"\$RESCUE_PASS\" >/dev/null 2>&1; fi; fi; fi; fi" >/dev/null 2>&1 || true
-    else
-      GW_IP=$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print $3; exit}')
-      [ -z "$GW_IP" ] && GW_IP="192.168.0.1"
-      /system/bin/ping -c 1 -W 1 "$GW_IP" >/dev/null 2>&1 || true
-    fi
+  # E. A cada ciclo (~4s): Keepalive ativo no Gateway + Vizinhos ARP da LAN (impede MediaTek WMM-PS sleep e mantém ARP vivo nos celulares da rede)
+  termux-wake-lock 2>/dev/null || true
+  pkill -9 -f "[u]powerd" 2>/dev/null || true
+  pkill -9 -f "[x]fce4-power-manager" 2>/dev/null || true
+  pkill -9 -f "[t]ermux-api BatteryStatus" 2>/dev/null || true
+  if [ -x "$PREFIX/bin/hb-shell" ]; then
+    "$PREFIX/bin/hb-shell" "if ip -4 addr show wlan0 2>/dev/null | grep -q 'inet '; then GW=\$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print \$3; exit}'); [ -z \"\$GW\" ] && GW='192.168.0.1'; /system/bin/ping -c 1 -W 1 \"\$GW\" >/dev/null 2>&1 & for peer in \$(ip -4 neigh show dev wlan0 2>/dev/null | awk '{print \$1}'); do /system/bin/ping -c 1 -W 1 \"\$peer\" >/dev/null 2>&1 & done; else RESCUE_SSID='HybridBox'; RESCUE_PASS='hybridbox123'; RESCUE_SEC='wpa2'; RESCUE_ENABLED='1'; [ -f /data/local/tmp/hb_rescue_wifi.conf ] && . /data/local/tmp/hb_rescue_wifi.conf 2>/dev/null; if [ \"\$RESCUE_ENABLED\" = '1' ] && [ -n \"\$RESCUE_SSID\" ]; then svc wifi enable 2>/dev/null; cmd wifi set-wifi-enabled enabled 2>/dev/null; cmd wifi set-scan-always-available enabled 2>/dev/null; cmd wifi start-scan >/dev/null 2>&1; if cmd wifi list-scan-results 2>/dev/null | grep -qF \"\$RESCUE_SSID\"; then if [ \"\$RESCUE_SEC\" = 'open' ] || [ -z \"\$RESCUE_PASS\" ]; then cmd wifi connect-network \"\$RESCUE_SSID\" open >/dev/null 2>&1; else cmd wifi connect-network \"\$RESCUE_SSID\" \"\$RESCUE_SEC\" \"\$RESCUE_PASS\" >/dev/null 2>&1; fi; fi; fi; fi" >/dev/null 2>&1 || true
+  else
+    GW_IP=$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print $3; exit}')
+    [ -z "$GW_IP" ] && GW_IP="192.168.0.1"
+    /system/bin/ping -c 1 -W 1 "$GW_IP" >/dev/null 2>&1 || true
   fi
 
-  # F. A cada ~96s (12 ciclos): Revalida watchdog de sistema, permissões MIUI Autostart (10008) e Eco-Standby (<15% bateria)
-  SLEEP_SEC=8
+  # F. A cada ~48s (12 ciclos de 4s): Revalida watchdog de sistema, permissões MIUI Autostart (10008), PowerKeeper deny e Eco-Standby (<15% bateria)
+  SLEEP_SEC=4
   if [ $((LOOP_COUNT % 12)) -eq 0 ]; then
     ensure_system_watchdog
     if [ -x "$PREFIX/bin/hb-shell" ]; then
-      BAT_STATE=$("$PREFIX/bin/hb-shell" "dumpsys deviceidle disable 2>/dev/null; settings put global wifi_sleep_policy 2 2>/dev/null; for p in com.termux com.termux.boot com.termux.x11 com.termux.api; do appops set \$p 10008 allow 2>/dev/null; cmd appops set \$p RUN_IN_BACKGROUND allow 2>/dev/null; done; dumpsys battery 2>/dev/null" 2>/dev/null)
+      BAT_STATE=$("$PREFIX/bin/hb-shell" "dumpsys deviceidle disable 2>/dev/null; settings put global wifi_sleep_policy 2 2>/dev/null; settings put global wifi_scan_throttle_enabled 0 2>/dev/null; for badpkg in com.miui.powerkeeper com.xiaomi.joyose; do cmd appops set \$badpkg WRITE_SETTINGS deny 2>/dev/null; cmd appops set \$badpkg GET_USAGE_STATS deny 2>/dev/null; cmd appops set \$badpkg RUN_IN_BACKGROUND deny 2>/dev/null; cmd appops set \$badpkg RUN_ANY_IN_BACKGROUND deny 2>/dev/null; done; for p in com.termux com.termux.boot com.termux.x11 com.termux.api; do appops set \$p 10008 allow 2>/dev/null; cmd appops set \$p RUN_IN_BACKGROUND allow 2>/dev/null; done; dumpsys battery 2>/dev/null" 2>/dev/null)
       if echo "$BAT_STATE" | grep -q "USB powered: false" && echo "$BAT_STATE" | grep -q "AC powered: false"; then
         UNPLUGGED_CYCLES=$((UNPLUGGED_CYCLES + 1))
         BAT_LVL=$(echo "$BAT_STATE" | awk '/level:/ {print $2; exit}')
         # Reduz brilho da tela quebrada para 0 em modo manual para economizar bateria sem interromper jogos ou Miracast
         "$PREFIX/bin/hb-shell" "settings put system screen_brightness_mode 0 2>/dev/null; settings put system screen_brightness 0 2>/dev/null" >/dev/null 2>&1 || true
         if [ -n "$BAT_LVL" ] && [ "$BAT_LVL" -le 15 ] 2>/dev/null; then
-          SLEEP_SEC=16
+          SLEEP_SEC=8
         fi
       else
         UNPLUGGED_CYCLES=0

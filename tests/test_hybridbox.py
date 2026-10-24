@@ -230,6 +230,48 @@ class TestHybridBoxSuite(unittest.TestCase):
         self.assertEqual(res["output"], "")
         self.assertIn("cwd", res)
 
+    def test_eco_standby_hibernate_and_wake_to_main_screen(self) -> None:
+        ctrl = AndroidController.__new__(AndroidController)
+        ctrl.standby_mode = False
+        ctrl.standby_reason = ""
+        ctrl.standby_since_ts = 0.0
+        ctrl.auto_standby_minutes = 15
+        ctrl.last_activity_ts = 1000.0
+        ctrl._cached_battery = {"phone_online": True, "level": 75}
+
+        with mock.patch("os.path.exists", return_value=True), \
+             mock.patch.object(ctrl, "_run_local_bridge_socket", return_value="") as mock_bridge, \
+             mock.patch.object(ctrl, "run_adb_shell", return_value="") as mock_shell, \
+             mock.patch.object(ctrl, "_save_runtime_cache"):
+            # 1. Enter Eco-Standby (Hibernation)
+            res_sleep = ctrl.set_standby_mode(True, reason="idle_timeout", auto_standby_minutes=20)
+            self.assertTrue(res_sleep["ok"])
+            self.assertTrue(res_sleep["standby_mode"])
+            self.assertTrue(ctrl.standby_mode)
+            self.assertEqual(ctrl.auto_standby_minutes, 20)
+            self.assertEqual(ctrl.standby_reason, "idle_timeout")
+            mock_bridge.assert_called_with("__HB_STANDBY_ON__", timeout=1.5)
+            self.assertTrue(mock_shell.called)
+
+            # 2. Wake from Eco-Standby -> returns to Main TV screen ("mode": "tv")
+            res_wake = ctrl.set_standby_mode(False, reason="manual_wake_switch")
+            self.assertTrue(res_wake["ok"])
+            self.assertFalse(res_wake["standby_mode"])
+            self.assertFalse(ctrl.standby_mode)
+            self.assertEqual(res_wake["mode"], "tv")
+            mock_bridge.assert_called_with("__HB_STANDBY_OFF__", timeout=1.5)
+
+    def test_termux_fast_local_bridge_5558_priority(self) -> None:
+        ctrl = AndroidController.__new__(AndroidController)
+        ctrl.last_activity_ts = 0.0
+        with mock.patch("os.path.exists", side_effect=lambda p: p == "/data/data/com.termux"), \
+             mock.patch.object(ctrl, "_run_local_bridge_socket", return_value="level: 82\n") as mock_bridge, \
+             mock.patch("subprocess.run") as mock_subproc:
+            out = ctrl.run_adb_shell("dumpsys battery", timeout=2.0)
+            self.assertEqual(out, "level: 82\n")
+            mock_bridge.assert_called_once()
+            mock_subproc.assert_not_called()
+
     def test_no_personal_data_in_git_tracked_files(self) -> None:
         if (BASE_DIR / ".git").exists():
             files = subprocess.check_output(["git", "ls-files"], cwd=BASE_DIR, text=True).splitlines()
