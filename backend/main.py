@@ -22,6 +22,8 @@ from pydantic import BaseModel
 from backend.android_controller import AndroidController
 from backend.app_registry import ANDROID_APPS, LINUX_APPS, get_all_apps
 from backend.bluetooth_gaming_controller import BluetoothGamingController
+from backend.cache_manager import get_cache_manager
+from backend.memory_janitor import MemoryJanitor
 from backend.projector_controller import ProjectorController
 from backend.ssh_terminal_controller import SshTerminalController
 from backend.wifi_portable_controller import WifiPortableController
@@ -68,12 +70,15 @@ def get_local_ip() -> str:
 class HybridBoxState:
     def __init__(self) -> None:
         self.mode: str = "tv"  # "tv", "linux" ou "games"
+        self.cache = get_cache_manager()
         self.android = AndroidController(adb_serial="127.0.0.1:5555")
         self.x11 = X11Controller(display_name=":0", android_controller=self.android)
         self.projector = ProjectorController(self.android)
         self.wifi = WifiPortableController(self.android, BASE_DIR)
         self.gaming = BluetoothGamingController(self.android, BASE_DIR)
         self.ssh_terminal = SshTerminalController(self.android, BASE_DIR)
+        self.janitor = MemoryJanitor(base_dir=BASE_DIR)
+        self.janitor.start()
         self.clients: Set[WebSocket] = set()
 
 
@@ -204,10 +209,13 @@ def apply_mode_switch(target_mode: str) -> str:
     state.android.touch_activity(wake_if_standby=True)
     state.mode = normalized
     if normalized == "linux":
+        state.cache.set_game_mode(False)
         state.android.switch_to_linux_desktop()
     elif normalized == "games":
+        state.cache.set_game_mode(True)
         state.android.switch_to_games_hub()
     else:
+        state.cache.set_game_mode(False)
         state.android.switch_to_tv_box()
     return state.mode
 
@@ -226,6 +234,7 @@ def execute_app_launch(app_id: str) -> Dict[str, Any]:
                 "message": res.get("message", ""),
             }
         if app_info["category"] == "games":
+            state.cache.set_game_mode(True)
             state.gaming.ensure_rom_directories_and_permissions()
             emu_sys_map = {
                 "snes9x": "snes",
@@ -371,6 +380,32 @@ async def api_system_revive() -> JSONResponse:
     res = await asyncio.to_thread(state.android.revive_phone_connection)
     await broadcast_state()
     return JSONResponse(res)
+
+
+@app.get("/api/system/memory")
+async def api_system_memory() -> JSONResponse:
+    """Retorna estatísticas detalhadas de memória RAM, cache e status do Janitor."""
+    return JSONResponse(
+        {
+            "ok": True,
+            "cache": state.cache.get_stats(),
+            "janitor": state.janitor.get_status(),
+        }
+    )
+
+
+@app.post("/api/system/cache/clear")
+async def api_system_cache/clear() -> JSONResponse:
+    """Limpa o cache em memória e dispara ciclo manual de higienização do Janitor."""
+    state.cache.clear()
+    clean_stats = await asyncio.to_thread(state.janitor.run_clean_cycle)
+    return JSONResponse(
+        {
+            "ok": True,
+            "cleaned": clean_stats,
+            "cache": state.cache.get_stats(),
+        }
+    )
 
 
 @app.post("/api/mode")
