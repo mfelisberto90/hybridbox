@@ -1226,6 +1226,8 @@ class AndroidController:
         k_up = (key or "").strip().upper()
         if not k_up:
             return
+        from backend.cache_manager import get_cache_manager
+        get_cache_manager().set_game_mode(True)
         style_clean = (style or "").strip().lower()
         active_emu = (self.active_emulator or "").strip().lower()
 
@@ -1378,6 +1380,8 @@ class AndroidController:
 
     def switch_to_linux_desktop(self) -> None:
         """Garante que o servidor Termux:X11 (:0) e XFCE4 estejam ativos, blinda contra toques fantasmas e traz o Termux:X11 para o primeiro plano."""
+        from backend.cache_manager import get_cache_manager
+        get_cache_manager().set_game_mode(False)
         self.ensure_ghost_touch_shield()
         self.send_raw_command(
             "run-as com.termux /data/data/com.termux/files/usr/bin/env "
@@ -1402,6 +1406,8 @@ class AndroidController:
 
     def switch_to_tv_box(self) -> None:
         """Retorna para o Projectivy Launcher ou Home do Android TV."""
+        from backend.cache_manager import get_cache_manager
+        get_cache_manager().set_game_mode(False)
         self.ensure_ghost_touch_shield()
         self.run_fallback_chain(
             [
@@ -1414,6 +1420,8 @@ class AndroidController:
 
     def switch_to_games_hub(self) -> None:
         """Mantém o emulador atual em primeiro plano (sem interromper o jogo ativo) ou abre o emulador de `active_emulator`."""
+        from backend.cache_manager import get_cache_manager
+        get_cache_manager().set_game_mode(True)
         self.ensure_ghost_touch_shield()
         emu_act_map = {
             "snes": "com.explusalpha.Snes9xPlus/com.imagine.BaseActivity",
@@ -1534,20 +1542,35 @@ class AndroidController:
                             self.last_activity_ts = time.time()
             except Exception:
                 pass
-            time.sleep(8.0)
+            from backend.cache_manager import get_cache_manager
+            sleep_time = 30.0 if get_cache_manager().is_game_mode() else 8.0
+            time.sleep(sleep_time)
 
     def get_battery_and_health(self, force: bool = False) -> Dict[str, Any]:
         """
         Retorna o status da bateria, conectividade e Eco-Standby do Xiaomi Redmi Note 8 Pro.
         Quando `force=False` e o cache em background está quente (<30s), responde em <0.1ms sem bloquear o loop HTTP/WS.
         """
-        now = time.time()
-        if not force and self._cached_battery and (now - self._last_battery_ts < 30.0):
-            cached = dict(self._cached_battery)
-            cached["standby_mode"] = self.standby_mode
-            cached["standby"] = self.get_standby_state()
-            return cached
-        return self._fetch_battery_and_health_sync()
+        from backend.cache_manager import get_cache_manager
+        cm = get_cache_manager()
+        ttl = cm.get_adaptive_ttl("battery", default=20.0)
+
+        if not force:
+            cached_cm = cm.get("battery_health")
+            if cached_cm is not None:
+                cached_cm["standby_mode"] = self.standby_mode
+                cached_cm["standby"] = self.get_standby_state()
+                return cached_cm
+            now = time.time()
+            if self._cached_battery and (now - self._last_battery_ts < ttl):
+                cached = dict(self._cached_battery)
+                cached["standby_mode"] = self.standby_mode
+                cached["standby"] = self.get_standby_state()
+                return cached
+
+        fresh = self._fetch_battery_and_health_sync()
+        cm.set("battery_health", dict(fresh), ttl=ttl)
+        return fresh
 
     def _fetch_battery_and_health_sync(self) -> Dict[str, Any]:
         """Coleta síncrona da telemetria de bateria (executada pela thread em background ou quando `force=True`)."""
