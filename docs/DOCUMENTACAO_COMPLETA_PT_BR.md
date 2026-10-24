@@ -177,7 +177,15 @@ O script `install.sh` detecta automaticamente que está rodando no Termux, insta
 
 ---
 
-## 8. Recuperação de Bateria 0% (Plug & Revive)
+## 8. Modo de Economia de Bateria / Hibernação (`Eco-Standby`) + Interruptor (`⏻`) e Conexão 24/7 Anti-Queda
+
+- **Conexão 24/7 Sem Quedas (`WIFI_MODE_FULL_LOW_LATENCY = 4`)**: O daemon `HybridBoxBridge` (`127.0.0.1:5558`, rodando como `uid=2000 shell`) mantém bloqueios permanentes `WIFI_MODE_FULL_LOW_LATENCY` (`type=4`), `WIFI_MODE_FULL_HIGH_PERF` (`type=3`) e `MulticastLock` no `IWifiManager` do Android, impedindo que o chip Wi-Fi entre em *WMM Power Save* quando a tela apaga. Além disso, o `hb_system_watchdog.sh` neutraliza o `com.miui.powerkeeper` e o `com.xiaomi.joyose` via `appops deny`, coloca o Termux na *whitelist* do `netpolicy` e mantém a tabela ARP aquecida a cada 4 segundos.
+- **Auto-Hibernação por Inatividade (`5 min`, `15 min`, `30 min`, `60 min` ou `Off`)**: Se o HybridBox ficar `X` minutos parado (padrão **15 min**) sem uso em **TV**, **Linux** ou **Games** (e sem vídeo/filme em reprodução ativa no `media_session`), ele entra automaticamente em **Eco-Standby**: troca o WakeLock para `PARTIAL_WAKE_LOCK`, apaga a tela física e a GPU (`KEYCODE_SLEEP` + brilho `0`) e pausa os processos gráficos do X11 (`SIGSTOP`), mantendo o Wi-Fi Low-Latency e o servidor `8080` **100% online**.
+- **Interruptor (`⏻`) no Topo e na Tela de Hibernação**: Você pode ativar ou desativar o modo de economia a qualquer momento pelo botão interruptor **`⏻`** no topo do app. Quando acionado para sair da hibernação, ele acorda o Xiaomi em `<200ms` e leva o aplicativo **direto para a tela principal (`TV Box` / `Projectivy Launcher`)**.
+
+---
+
+## 9. Recuperação de Bateria 0% (Plug & Revive)
 
 Se a bateria do celular descarregar até `0%` e ele desligar:
 1. Conecte o celular na tomada ou na porta USB do computador e ligue-o no botão físico Power.

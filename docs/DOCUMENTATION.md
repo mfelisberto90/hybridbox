@@ -288,8 +288,10 @@ sudo /data/local/tmp/grab_ghost_touch --daemon
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/status` | `GET` | Returns active mode (`tv`, `linux`, `games`), local IP, mDNS URL, battery telemetry, and app catalog |
-| `/api/battery` | `GET` | Real-time battery percentage, charging status (AC/USB), temperature (°C), voltage, and health |
+| `/api/status` | `GET` | Returns active mode (`tv`, `linux`, `games`), local IP, mDNS URL, battery telemetry, Eco-Standby state, and app catalog |
+| `/api/battery` | `GET` | Real-time battery percentage, charging status (AC/USB), temperature (°C), Eco-Standby status, and health |
+| `/api/system/standby` | `GET` / `POST` | Toggles Smart Eco-Standby / Hibernation (`standby: true/false`) or updates the idle timeout (`auto_standby_minutes: 5..60 / 0`); waking from standby automatically returns to the Main TV Box screen (`mode: "tv"`) |
+| `/api/dpad` & `/api/key` | `POST` | Zero-drop HTTP fallback for D-Pad, media, and keyboard keys while WebSocket is reconnecting on mobile wake |
 | `/api/mode` | `POST` | Switches the phone between `tv` (Projectivy Launcher), `linux` (Termux:X11 XFCE4), and `games` |
 | `/api/launch` | `POST` | Launches any registered Android TV, Linux Desktop, or Emulator app by `app_id` |
 | `/api/projector/status` | `GET` | Lists discovered Miracast, Wi-Fi Direct, LAN HTTP, and DLNA Projectors & Smart TVs |
