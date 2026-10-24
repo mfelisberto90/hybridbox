@@ -1,0 +1,14 @@
+{
+  "ssid": "HybridBox",
+  "password": "hybridbox123",
+  "security": "wpa2",
+  "auto_connect": true,
+  "saved_networks": [
+    {
+      "ssid": "HybridBox",
+      "password": "hybridbox123",
+      "security": "wpa2",
+      "is_rescue": true
+    }
+  ]
+}

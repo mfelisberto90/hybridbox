@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#090d16"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <linearGradient id="games" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+  <!-- App Tile Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="24" y="24" width="464" height="464" rx="92" fill="none" stroke="url(#accent)" stroke-width="6" opacity="0.38"/>
+
+  <!-- TV / Linux Screen Frame (centered at X=256, Y=168) -->
+  <rect x="88" y="78" width="336" height="180" rx="26" fill="#090d16" stroke="url(#accent)" stroke-width="12"/>
+  <line x1="256" y1="106" x2="256" y2="230" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Left Half: TV Play Triangle (centered at X=172, Y=168) -->
+  <path d="M148 136 L204 168 L148 200 Z" fill="#38bdf8"/>
+
+  <!-- Right Half: Linux Prompt (centered at X=340, Y=168) -->
+  <path d="M306 146 L334 168 L306 190" fill="none" stroke="#a5b4fc" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="346" y1="190" x2="376" y2="190" stroke="#f59e0b" stroke-width="12" stroke-linecap="round"/>
+
+  <!-- Remote D-Pad & Gamepad Ring (centered at X=256, Y=372) -->
+  <circle cx="256" cy="372" r="88" fill="#111827" stroke="url(#accent)" stroke-width="12"/>
+  <!-- Up Arrow -->
+  <path d="M256 300 L270 318 L242 318 Z" fill="#e2e8f0"/>
+  <!-- Down Arrow -->
+  <path d="M256 444 L270 426 L242 426 Z" fill="#e2e8f0"/>
+  <!-- Left Arrow -->
+  <path d="M184 372 L202 358 L202 386 Z" fill="#e2e8f0"/>
+  <!-- Right Arrow -->
+  <path d="M328 372 L310 358 L310 386 Z" fill="#e2e8f0"/>
+  <!-- Center OK Button -->
+  <circle cx="256" cy="372" r="30" fill="url(#accent)"/>
+</svg>

@@ -1,0 +1,29 @@
+# Python virtual environments & bytecode cache
+.venv/
+.venv314/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs, temporary files & local auto-discovery runtime cache
+*.log
+*.tmp
+.hybridbox_runtime.json
+.env
+
+# Large binary APK installers & local ROM files (keep README.md in both folders)
+apks/*.apk
+apks/*.zip
+apks/*/*.apk
+apks/*/*.zip
+!apks/README.md
+
+roms/*/*
+!roms/README.md
+!roms/covers/
+
+# OS metadata
+.DS_Store
+Thumbs.db

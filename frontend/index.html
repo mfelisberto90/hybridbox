@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#090b10" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="HybridBox" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png" />
+  <title>HybridBox Remote PWA</title>
+  <link rel="stylesheet" href="/static/styles.css?v=23" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <!-- TOP BAR: Unified Status & Battery Pill + Spacious System Switcher (TV | Linux | Games) + Quick Tools -->
+    <header class="topbar">
+      <button id="batteryPill" class="status-battery-pill" type="button" title="Xiaomi Status &amp; Battery (Tap for Diagnostics / Reconnect)">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">Connecting</span>
+      </button>
+
+      <div class="mode-switcher" role="tablist" aria-label="System Mode Switcher">
+        <button id="btnModeTv" class="mode-btn active" data-mode="tv" type="button">
+          <span class="mode-icon">📺</span>
+          <span class="mode-label">TV</span>
+        </button>
+        <button id="btnModeLinux" class="mode-btn" data-mode="linux" type="button">
+          <span class="mode-icon">🐧</span>
+          <span class="mode-label">Linux</span>
+        </button>
+        <button id="btnModeGames" class="mode-btn" data-mode="games" type="button">
+          <span class="mode-icon">🎮</span>
+          <span class="mode-label">Games</span>
+        </button>
+      </div>
+
+      <div class="top-actions">
+        <button id="btnProjectorOpen" class="icon-btn projector-top-btn" type="button" title="TV, Projector &amp; Portable Wi-Fi" aria-label="TV, Projector &amp; Portable Wi-Fi">
+          📽️
+        </button>
+        <button id="btnKeyboardToggle" class="icon-btn" type="button" title="Open Keyboard" aria-label="Open Keyboard">
+          ⌨️
+        </button>
+        <button id="btnAppsDrawer" class="icon-btn" type="button" title="App Drawer" aria-label="App Drawer">
+          🚀
+        </button>
+      </div>
+    </header>
+
+    <!-- SMART RECOVERY BANNER: XIAOMI OFFLINE / OUT OF BATTERY / LOW BATTERY ALERT -->
+    <section id="offlineRecoveryBanner" class="offline-recovery-banner hidden" aria-live="polite">
+      <div class="offline-banner-header">
+        <div class="offline-banner-info">
+          <div id="offlineBannerTitle" class="offline-banner-title">
+            🔌 Xiaomi Offline — Likely Powered Off (Out of Battery)
+          </div>
+          <div id="offlineBannerDesc" class="offline-banner-desc">
+            The PWA opened in offline mode, but the Xiaomi Redmi Note 8 Pro is not responding over Wi-Fi or USB.
+          </div>
+        </div>
+        <button id="btnDismissOfflineBanner" class="icon-btn offline-close-btn" type="button" title="Dismiss alert">✕</button>
+      </div>
+
+      <div class="offline-banner-actions">
+        <button id="btnReviveNow" class="proj-btn primary offline-revive-btn" type="button">
+          🔄 Reconnect / Wake Up Now
+        </button>
+        <button id="btnToggleOfflineGuide" class="proj-btn secondary offline-guide-btn" type="button">
+          🆘 What to do when powered off?
+        </button>
+      </div>
+
+      <div id="offlineGuideSteps" class="offline-guide-steps hidden">
+        <div class="offline-step-item">
+          <span class="offline-step-num">1</span>
+          <div>
+            <strong>Plug into PC USB Cable (or Charger):</strong> If the battery reached <code>0%</code>, wait <strong>1–2 minutes</strong> on the cable to build a minimum charge.
+          </div>
+        </div>
+        <div class="offline-step-item">
+          <span class="offline-step-num">2</span>
+          <div>
+            <strong>Hold the Physical <code>Power</code> Button for 5–10 seconds:</strong> Until you feel a short vibration on the Xiaomi. Wait ~45 seconds for Android to boot (<strong>Termux:Boot</strong> starts the server automatically!).
+          </div>
+        </div>
+        <div class="offline-step-item">
+          <span class="offline-step-num">3</span>
+          <div>
+            <strong>Automatic Plug &amp; Revive (5s on PC):</strong> With the USB cable plugged into your PC, the guardian activates Wireless ADB (<code>5555</code>) and controllers automatically! If away from home, turn on your phone's Wi-Fi Hotspot named <code>HybridBox</code> with password <code>hybridbox123</code>.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUICK TYPING BAR (VIRTUAL KEYBOARD) -->
+    <section id="keyboardBar" class="keyboard-bar hidden">
+      <input
+        id="virtualKeyboardInput"
+        type="text"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder="Type here or press Enter..."
+      />
+      <button id="btnSendText" class="kbd-action-btn primary" type="button">Send</button>
+      <button id="btnKeyBackspace" class="kbd-action-btn" type="button" data-key="Backspace">⌫</button>
+      <button id="btnKeyEnter" class="kbd-action-btn" type="button" data-key="Enter">↵</button>
+      <button id="btnKeyEsc" class="kbd-action-btn" type="button" data-key="Escape">Esc</button>
+    </section>
+
+    <!-- TOP QUICK LAUNCH STRIP -->
+    <section class="quick-launch-strip">
+      <button id="btnQuickProjector" class="quick-chip projector-chip" type="button">📽️ Projector</button>
+      <button id="btnQuickWifi" class="quick-chip wifi-portable-chip" type="button">📡 Portable Wi-Fi</button>
+      <button id="btnQuickBrowser" class="quick-chip ssh-chip" type="button" data-launch="browser">🌐 Linux Browser</button>
+      <button id="btnQuickSsh" class="quick-chip ssh-chip" type="button">💻 SSH Terminal</button>
+      <button id="btnQuickSnes" class="quick-chip games-chip" type="button" data-launch="snes9x">🍄 SNES</button>
+      <button id="btnQuickMame" class="quick-chip games-chip" type="button" data-launch="neoemu">🕹️ NEO.emu</button>
+      <button id="btnQuickMame4droid" class="quick-chip games-chip" type="button" data-launch="mame4droid">🪙 MAME4droid</button>
+      <button id="btnQuickMd" class="quick-chip games-chip" type="button" data-launch="mdemu">🦔 Mega Drive</button>
+      <button id="btnQuickBt" class="quick-chip bt-chip" type="button">🔵 BT Controllers</button>
+      <button class="quick-chip" type="button" data-launch="smarttube">▶️ SmartTube</button>
+      <button class="quick-chip" type="button" data-launch="stremio">🎬 Stremio</button>
+      <button class="quick-chip" type="button" data-launch="kodi">🎞️ Kodi</button>
+      <button class="quick-chip" type="button" data-launch="projectivy">📺 Projectivy</button>
+      <button class="quick-chip" type="button" data-launch="displaylink">🔌 HDMI Cable</button>
+    </section>
+
+    <!-- MAIN CONTROL STAGE -->
+    <main class="main-stage">
+      <!-- ==================== VIEW 1: TV BOX MODE (D-PAD + MEDIA) ==================== -->
+      <section id="viewTv" class="view-panel active">
+        <div class="subview-tabs">
+          <button id="tabTvDpad" class="subtab-btn active" type="button">🎮 D-Pad Remote</button>
+          <button id="tabTvCursor" class="subtab-btn" type="button">👆 Android Cursor</button>
+        </div>
+
+        <!-- Ergonomic D-Pad Container -->
+        <div id="tvDpadContainer" class="dpad-stage">
+          <div class="dpad-wheel">
+            <button class="dpad-btn up" type="button" data-dpad="UP" aria-label="Up">
+              <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+            </button>
+            <button class="dpad-btn left" type="button" data-dpad="LEFT" aria-label="Left">
+              <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+            </button>
+            <button class="dpad-center" type="button" data-dpad="OK" aria-label="OK / Confirm">
+              <span>OK</span>
+            </button>
+            <button class="dpad-btn right" type="button" data-dpad="RIGHT" aria-label="Right">
+              <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            </button>
+            <button class="dpad-btn down" type="button" data-dpad="DOWN" aria-label="Down">
+              <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+            </button>
+          </div>
+
+          <!-- Android Navigation (Back, Home, Recents, Menu) -->
+          <div class="nav-row">
+            <button class="nav-pill" type="button" data-dpad="BACK">
+              <span class="pill-icon">↩️</span>
+              <span class="pill-label">Back</span>
+            </button>
+            <button class="nav-pill" type="button" data-dpad="HOME">
+              <span class="pill-icon">🏠</span>
+              <span class="pill-label">Home</span>
+            </button>
+            <button class="nav-pill" type="button" data-dpad="RECENTS">
+              <span class="pill-icon">🗂️</span>
+              <span class="pill-label">Recents</span>
+            </button>
+            <button class="nav-pill" type="button" data-dpad="MENU">
+              <span class="pill-icon">☰</span>
+              <span class="pill-label">Menu</span>
+            </button>
+          </div>
+
+          <!-- Media & Volume Deck -->
+          <div class="media-deck">
+            <div class="deck-row">
+              <button class="deck-btn" type="button" data-dpad="VOL_DOWN">🔉 Vol -</button>
+              <button class="deck-btn" type="button" data-dpad="MUTE">🔇 Mute</button>
+              <button class="deck-btn" type="button" data-dpad="VOL_UP">🔊 Vol +</button>
+            </div>
+            <div class="deck-row">
+              <button class="deck-btn" type="button" data-dpad="PREV">⏮️ Prev</button>
+              <button class="deck-btn play-pause" type="button" data-dpad="PLAY_PAUSE">⏯️ Play / Pause</button>
+              <button class="deck-btn" type="button" data-dpad="NEXT">⏭️ Next</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== VIEW 2: LINUX DESKTOP MODE (X11 TRACKPAD + WI-FI SSH TERMINAL) ==================== -->
+      <section id="viewLinux" class="view-panel">
+        <div id="linuxSubTabs" class="subview-tabs">
+          <button id="tabLinuxTrackpad" class="subtab-btn active" type="button">🖱️ X11 Trackpad</button>
+          <button id="tabLinuxSsh" class="subtab-btn" type="button">💻 SSH &amp; Wi-Fi Terminal</button>
+        </div>
+        <div id="tvCursorSubTabs" class="subview-tabs hidden">
+          <button id="tabTvCursorBackDpad" class="subtab-btn" type="button">🎮 D-Pad Remote</button>
+          <button id="tabTvCursorActive" class="subtab-btn active" type="button">👆 Android Cursor</button>
+        </div>
+
+        <!-- LINUX SUB-TAB 1: MULTITOUCH TRACKPAD -->
+        <div id="linuxTrackpadContainer" class="games-subview active">
+          <div id="trackpadSurface" class="trackpad-surface">
+            <div class="trackpad-watermark">
+              <div class="watermark-icon" id="trackpadBadgeIcon">🐧</div>
+              <div class="watermark-title" id="trackpadBadgeTitle">X11 Multitouch Trackpad</div>
+              <div class="watermark-subtitle">
+                1 finger: Move / Tap: Left Click • 2 fingers: Right Click / Scroll • Left Btn: Hold to Drag
+              </div>
+            </div>
+            <div id="touchRipple" class="touch-ripple hidden"></div>
+          </div>
+
+          <!-- Desktop Keyboard Quick Macro Bar -->
+          <div class="linux-macro-bar">
+            <button class="macro-btn" type="button" data-launch="browser">🌐 Browser</button>
+            <button class="macro-btn" type="button" data-linux-key="Super_L">❖ Menu</button>
+            <button class="macro-btn" type="button" data-linux-key="Alt+Tab">⇄ Alt+Tab</button>
+            <button class="macro-btn" type="button" data-linux-key="ctrl+c">Ctrl+C</button>
+            <button class="macro-btn" type="button" data-linux-key="ctrl+v">Ctrl+V</button>
+            <button class="macro-btn" type="button" data-linux-key="Alt+F4">✕ Close</button>
+          </div>
+
+          <!-- Bottom Hardware Mouse Buttons (Left, Scroll, Right) -->
+          <div class="mouse-buttons-bar">
+            <button id="btnMouseLeft" class="mouse-hw-btn left-btn" type="button">
+              Left Click
+            </button>
+            <div id="scrollStrip" class="mouse-scroll-strip" title="Slide to Scroll">
+              <span>⇅ Scroll</span>
+            </div>
+            <button id="btnMouseRight" class="mouse-hw-btn right-btn" type="button">
+              Right Click
+            </button>
+          </div>
+        </div>
+
+        <!-- LINUX SUB-TAB 2: DIRECT SSH TERMINAL & WI-FI OTA UPDATE -->
+        <div id="linuxSshContainer" class="games-subview">
+          <div class="ssh-connection-card">
+            <div class="ssh-card-header">
+              <span id="sshStatusBadge" class="ssh-status-badge online">🟢 Wi-Fi SSH Active (Port 8022)</span>
+              <button id="btnCopySshCmd" class="ssh-copy-btn" type="button">📋 Copy SSH Command</button>
+            </div>
+            <div class="ssh-cmd-box">
+              <code id="sshCommandDisplay">ssh hybridbox   # or: ssh -p 8022 termux@hybridbox.local</code>
+            </div>
+            <div class="ssh-action-row">
+              <button id="btnSyncWifiUpdate" class="proj-btn primary ssh-sync-btn" type="button">
+                🔄 Update App via Wi-Fi (SSH Push)
+              </button>
+              <button id="btnOpenLaptopSsh" class="proj-btn secondary" type="button">
+                💻 Open SSH on Laptop
+              </button>
+            </div>
+          </div>
+
+          <!-- Target Selector + Quick SSH Command Chips -->
+          <div class="ssh-toolbar">
+            <select id="sshTargetSelect" class="ssh-target-select">
+              <option value="android">📱 Android / Termux (Wi-Fi SSH hybridbox.local)</option>
+              <option value="host">💻 Local Laptop (PowerShell)</option>
+            </select>
+            <div class="ssh-quick-chips">
+              <button class="ssh-chip-cmd" type="button" data-ssh-cmd="uname -a && id && ip -4 addr show wlan0 | grep inet">📡 Net Info</button>
+              <button class="ssh-chip-cmd" type="button" data-ssh-cmd="ls -la ~/hybridbox-remote-pwa">📂 App Files</button>
+              <button class="ssh-chip-cmd" type="button" data-ssh-cmd="pkg update -y && pkg upgrade -y">📦 Update Termux</button>
+              <button class="ssh-chip-cmd" type="button" data-ssh-cmd="df -h">💾 Disk</button>
+              <button id="btnClearTerminal" class="ssh-chip-cmd" type="button">🧹 Clear</button>
+            </div>
+          </div>
+
+          <!-- Interactive Web SSH Console -->
+          <div id="sshTerminalOutput" class="ssh-terminal-output">
+            <div class="term-line system">=== HybridBox Web SSH Terminal (Wi-Fi hybridbox.local:8022) ===</div>
+            <div class="term-line info">On your laptop, you can also open any terminal and run: <strong>ssh hybridbox</strong></div>
+          </div>
+
+          <!-- SSH Command Input Bar -->
+          <div class="ssh-input-bar">
+            <span id="sshPromptLabel" class="ssh-prompt-label">$</span>
+            <input
+              id="sshCommandInput"
+              type="text"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              placeholder="Enter an SSH command (e.g. ls -la, pkg install htop, git status)..."
+            />
+            <button id="btnRunSshCommand" class="kbd-action-btn primary" type="button">Run</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== VIEW 3: GAMES SESSION (SNES, MAME & BLUETOOTH CONTROLLERS) ==================== -->
+      <section id="viewGames" class="view-panel">
+        <div class="subview-tabs games-subtabs">
+          <button id="tabGamesPad" class="subtab-btn active" type="button">🕹️ Controller</button>
+          <button id="tabGamesConsoles" class="subtab-btn" type="button">
+            📚 Game Library <span id="romCountBadge" class="rom-count-badge">53</span>
+          </button>
+          <button id="tabGamesBluetooth" class="subtab-btn" type="button">🔵 Bluetooth</button>
+        </div>
+
+        <!-- SUB-TAB 1: VIRTUAL SNES & ARCADE GAMEPAD (MULTITOUCH + FULL SCREEN LANDSCAPE + PHOTO SKIN + MORE CONTROLLERS) -->
+        <div id="gamesPadContainer" class="games-subview active" data-active-skin="snes" data-active-player="1">
+          <!-- DEDICATED TOP HUD (ALWAYS VISIBLE IN FULL SCREEN LANDSCAPE MODE) -->
+          <div id="gamepadTopHud" class="gamepad-top-hud">
+            <button id="btnTopBack" class="gp-top-hud-btn back-btn" type="button" data-gamepad="BACK" title="Back / Game Menu">
+              ↩️ BACK
+            </button>
+            <button id="btnTopCoin" class="gp-top-hud-btn coin-btn" type="button" data-gamepad="BTN_COIN" title="Insert Coin (Coin / Select)">
+              🪙 COIN <span id="coinCounterBadge" class="coin-counter-badge">0</span>
+            </button>
+            <button id="btnTopStart" class="gp-top-hud-btn start-btn" type="button" data-gamepad="BTN_START" title="Start Game (Start)">
+              ▶️ START
+            </button>
+            <button id="btnTopChooseGame" class="gp-top-hud-btn choose-game-btn" type="button" title="Pick Game by Cover &amp; Title (Visual Gallery)">
+              📚 GAMES
+            </button>
+            <button id="btnMoreControllersTop" class="gp-top-hud-btn more-ctrl-btn" type="button" title="Add or Switch Controller (SNES, Arcade, Mega Drive, Player 2)">
+              🎮 PADS <span id="activePlayerBadge" class="player-pill-badge">P1</span>
+            </button>
+            <button id="btnGamepadFullscreen" class="gp-top-hud-btn fullscreen-btn" type="button" title="Full Screen Landscape Mode">
+              ⛶ FULL LANDSCAPE
+            </button>
+          </div>
+
+          <!-- IN-CONTROLLER QUICK GAME COVER DRAWER (WORKS EVEN IN FULL SCREEN LANDSCAPE) -->
+          <div id="hudGameDrawer" class="hud-game-drawer hidden">
+            <div class="hud-game-drawer-card">
+              <div class="hud-game-drawer-header">
+                <div class="hud-drawer-title-wrap">
+                  <span class="hud-drawer-title">📚 Choose Game on TV</span>
+                  <span class="hud-drawer-subtitle">Tap any cover to launch directly on the TV/Projector in Landscape</span>
+                </div>
+                <button id="btnCloseHudGameDrawer" class="icon-btn" type="button" title="Close Gallery">✕</button>
+              </div>
+              <div class="rom-gallery-toolbar compact">
+                <div class="rom-search-box">
+                  <span class="rom-search-icon">🔍</span>
+                  <input
+                    id="hudRomSearchInput"
+                    type="text"
+                    class="rom-search-input"
+                    autocomplete="off"
+                    placeholder="Search game by title or genre (e.g. Metal Slug, Mario, Fighting)..."
+                  />
+                </div>
+                <div id="hudRomFilterBar" class="rom-filter-pills">
+                  <button class="rom-filter-pill active" type="button" data-rom-filter="all">🔥 All</button>
+                  <button class="rom-filter-pill mame" type="button" data-rom-filter="mame">🕹️ NeoGeo / Arcade</button>
+                  <button class="rom-filter-pill snes" type="button" data-rom-filter="snes">🍄 Super Nintendo</button>
+                  <button class="rom-filter-pill megadrive" type="button" data-rom-filter="megadrive">🦔 Mega Drive</button>
+                </div>
+              </div>
+              <div id="hudRomCoverGrid" class="rom-cover-grid hud-drawer-grid"></div>
+            </div>
+          </div>
+
+          <!-- Console Status Bar + Current Game + Realistic Photo Toggle + Bluetooth -->
+          <div class="gamepad-topbar">
+            <div class="gamepad-console-badge" id="activeConsoleBadgeBtn" title="Tap to pick another game by cover">
+              <span id="activeConsoleIcon">🍄</span>
+              <span id="activeConsoleLabel">Super Nintendo (SNES Classic)</span>
+            </div>
+            <div class="gamepad-topbar-actions">
+              <button id="btnTogglePhotoMode" class="photo-mode-pill active" type="button" title="Toggle realistic Super Nintendo controller photo">
+                📸 SNES Photo: ON
+              </button>
+              <button id="btnPhysicalGamepadStatus" class="bt-gamepad-pill" type="button">
+                🔵 Pair BT
+              </button>
+            </div>
+          </div>
+
+          <!-- Controller Skin Quick Strip (SNES / SNES US / Arcade / Mega Drive / Player 2 / + Controllers) -->
+          <div id="controllerQuickStrip" class="controller-quick-strip">
+            <button class="ctrl-skin-chip active" type="button" data-skin-select="snes" data-player-select="1">
+              🍄 SNES Classic (P1)
+            </button>
+            <button class="ctrl-skin-chip" type="button" data-skin-select="snes_us" data-player-select="1">
+              🟣 SNES US Purple (P1)
+            </button>
+            <button class="ctrl-skin-chip" type="button" data-skin-select="mame" data-player-select="1">
+              🕹️ Arcade Stick (P1)
+            </button>
+            <button class="ctrl-skin-chip" type="button" data-skin-select="megadrive" data-player-select="1">
+              🦔 Mega Drive 6-Btn (P1)
+            </button>
+            <button class="ctrl-skin-chip" type="button" data-skin-select="snes" data-player-select="2">
+              🎮 Controller 2 (P2)
+            </button>
+            <button id="btnQuickMoreControllers" class="ctrl-skin-chip add-ctrl-chip" type="button">
+              ➕ More Controllers...
+            </button>
+          </div>
+
+          <!-- Top Shoulder Triggers (L1 / L2 / Turbo / R2 / R1) -->
+          <div class="snes-shoulder-row">
+            <button class="shoulder-btn l-btn" type="button" data-gamepad="BTN_L">L1</button>
+            <button class="shoulder-btn l2-btn" type="button" data-gamepad="BTN_L2">L2</button>
+            <button id="btnTurboToggle" class="turbo-toggle-btn" type="button" title="Toggle Turbo Rapid-Fire Mode">
+              ⚡ TURBO: OFF
+            </button>
+            <button class="shoulder-btn r2-btn" type="button" data-gamepad="BTN_R2">R2</button>
+            <button class="shoulder-btn r-btn" type="button" data-gamepad="BTN_R">R1</button>
+          </div>
+
+          <!-- Ergonomic Super Nintendo Controller Shell with Authentic Photo Showcase -->
+          <div id="snesControllerShell" class="snes-controller-shell photo-mode-active" data-skin="snes">
+            <!-- Left: Classic Directional Cross (D-Pad) -->
+            <div class="snes-dpad-zone">
+              <div class="snes-cross">
+                <button class="snes-dir up" type="button" data-gamepad="UP" aria-label="Up">▲</button>
+                <button class="snes-dir left" type="button" data-gamepad="LEFT" aria-label="Left">◀</button>
+                <div class="snes-cross-pivot"></div>
+                <button class="snes-dir right" type="button" data-gamepad="RIGHT" aria-label="Right">▶</button>
+                <button class="snes-dir down" type="button" data-gamepad="DOWN" aria-label="Down">▼</button>
+              </div>
+            </div>
+
+            <!-- Center of SNES Shell: Brand Header + Authentic Photo + Slanted SELECT & START Pills -->
+            <div class="snes-center-shell-zone">
+              <div class="snes-brand-header">
+                <span class="snes-brand-title" id="shellBrandTitle">SUPER NINTENDO</span>
+                <span class="snes-brand-sub" id="shellBrandSub">ENTERTAINMENT SYSTEM • P1</span>
+              </div>
+              <div class="snes-photo-showcase" id="snesPhotoShowcase" title="Tap to open controller skins gallery">
+                <img
+                  id="activeControllerPhoto"
+                  class="snes-photo-img"
+                  src="/static/icons/snes-controller-photo.jpg"
+                  alt="Super Nintendo (SNES) Controller Photo"
+                />
+              </div>
+              <div class="snes-slanted-pills">
+                <button class="snes-slanted-btn" type="button" data-gamepad="BTN_SELECT" title="Select / Insert Coin">
+                  <span class="slanted-bar"></span>
+                  <span class="slanted-label">SELECT</span>
+                </button>
+                <button class="snes-slanted-btn start-slanted" type="button" data-gamepad="BTN_START" title="Start">
+                  <span class="slanted-bar"></span>
+                  <span class="slanted-label">START</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: Dark-Gray Circle with Colored SNES Diamond (Blue X, Green Y, Red A, Yellow B + 6-Btn Z/C) -->
+            <div class="snes-abxy-zone">
+              <div class="snes-diamond">
+                <div class="snes-pair-track track-xy" aria-hidden="true"></div>
+                <div class="snes-pair-track track-ab" aria-hidden="true"></div>
+                <button class="snes-face-btn btn-x" type="button" data-gamepad="BTN_X">
+                  <span class="btn-letter">X</span>
+                </button>
+                <button class="snes-face-btn btn-y" type="button" data-gamepad="BTN_Y">
+                  <span class="btn-letter">Y</span>
+                </button>
+                <button class="snes-face-btn btn-a" type="button" data-gamepad="BTN_A">
+                  <span class="btn-letter">A</span>
+                </button>
+                <button class="snes-face-btn btn-b" type="button" data-gamepad="BTN_B">
+                  <span class="btn-letter">B</span>
+                </button>
+                <!-- Extra Z & C buttons (visible on 6-button layouts: Arcade Stick & Mega Drive) -->
+                <button class="snes-face-btn btn-z extra-6btn" type="button" data-gamepad="BTN_Z">
+                  <span class="btn-letter">Z</span>
+                </button>
+                <button class="snes-face-btn btn-c extra-6btn" type="button" data-gamepad="BTN_C">
+                  <span class="btn-letter">C</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Center Deck: COIN (MAME) + SELECT + START + Emulator Menu -->
+          <div class="snes-center-deck">
+            <button class="arcade-coin-btn" type="button" data-gamepad="BTN_COIN">
+              🪙 INSERT COIN
+            </button>
+            <button class="snes-pill-btn" type="button" data-gamepad="BTN_SELECT">
+              SELECT
+            </button>
+            <button class="snes-pill-btn start-pill" type="button" data-gamepad="BTN_START">
+              START
+            </button>
+            <button class="arcade-menu-btn" type="button" data-gamepad="BACK" title="Emulator Menu / Back">
+              ↩️ BACK / MENU
+            </button>
+          </div>
+
+          <!-- Quick Console Emulator Shortcuts at Footer of Gamepad -->
+          <div class="gamepad-quick-consoles">
+            <button class="gp-console-btn snes" type="button" data-emu-launch="snes9x">
+              🍄 SNES
+            </button>
+            <button class="gp-console-btn mame" type="button" data-emu-launch="neoemu">
+              🕹️ NEO.emu
+            </button>
+            <button class="gp-console-btn mame" type="button" data-emu-launch="mame4droid">
+              🪙 MAME4droid
+            </button>
+            <button class="gp-console-btn lemuroid" type="button" data-emu-launch="mdemu">
+              🦔 Mega Drive
+            </button>
+            <button class="gp-console-btn lemuroid" type="button" data-emu-launch="lemuroid">
+              👾 Lemuroid
+            </button>
+          </div>
+        </div>
+
+        <!-- SUB-TAB 2: VISUAL GAME COVER GALLERY & CONSOLES -->
+        <div id="gamesConsolesContainer" class="games-subview">
+          <div id="gamesStatusBanner" class="games-banner">
+            📚 <strong>Retro Game Gallery:</strong> Tap any game cover below to launch it directly on the TV/Projector in full-screen landscape!
+          </div>
+
+          <!-- CLEAN VISUAL GALLERY BY COVERS & TITLES (NINTENDO SWITCH / ARCADE FRONTEND STYLE) -->
+          <div class="rom-gallery-card">
+            <div class="rom-gallery-toolbar">
+              <div class="rom-search-box">
+                <span class="rom-search-icon">🔍</span>
+                <input
+                  id="romSearchInput"
+                  type="text"
+                  class="rom-search-input"
+                  autocomplete="off"
+                  placeholder="Search game by title or genre (Metal Slug, Mario, KOF)..."
+                />
+                <button id="btnClearRomSearch" class="rom-search-clear hidden" type="button" title="Clear search">✕</button>
+              </div>
+
+              <div id="romFilterBar" class="rom-filter-pills">
+                <button class="rom-filter-pill active" type="button" data-rom-filter="all">🔥 All</button>
+                <button class="rom-filter-pill mame" type="button" data-rom-filter="mame">🕹️ NeoGeo / Arcade</button>
+                <button class="rom-filter-pill snes" type="button" data-rom-filter="snes">🍄 Super Nintendo</button>
+                <button class="rom-filter-pill megadrive" type="button" data-rom-filter="megadrive">🦔 Mega Drive</button>
+              </div>
+            </div>
+
+            <!-- Responsive Game Cover Grid -->
+            <div id="romListContainer" class="rom-cover-grid"></div>
+          </div>
+
+          <!-- Integrated EmulatorJS Web Player (Optional browser play) -->
+          <div id="webEmulatorCard" class="web-emulator-card hidden">
+            <div class="web-emu-header">
+              <span id="webEmuTitle">🌐 EmulatorJS Web Player</span>
+              <button id="btnCloseWebEmu" class="icon-btn" type="button">✕</button>
+            </div>
+            <div id="emulatorJsHost" class="emulatorjs-host"></div>
+          </div>
+
+          <!-- Installed Emulators & ROM Upload / Management Section -->
+          <div class="rom-upload-card">
+            <div class="rom-upload-header">
+              <span>⚙️ Installed Emulators &amp; Add Games</span>
+              <select id="romSystemSelect" class="rom-system-select">
+                <option value="snes">🍄 Super Nintendo (.sfc / .smc / .zip)</option>
+                <option value="mame">🕹️ MAME / NeoGeo Arcade (.zip)</option>
+                <option value="megadrive">🦔 Mega Drive (.md / .bin / .zip)</option>
+              </select>
+            </div>
+            <div class="rom-upload-actions">
+              <button id="btnInstallGamePack" class="proj-btn primary" type="button">
+                📦 Sync Full Game Pack
+              </button>
+              <input id="romFileInput" type="file" accept=".sfc,.smc,.zip,.7z,.md,.bin,.nes,.gba" class="hidden" />
+              <button id="btnPickRomFile" class="proj-btn secondary" type="button">
+                ➕ Upload ROM File (.sfc / .zip)
+              </button>
+            </div>
+            <div id="emulatorsList" class="emulators-list" style="margin-top: 10px;"></div>
+          </div>
+        </div>
+
+        <!-- SUB-TAB 3: BLUETOOTH CONTROLLER MANAGER & PAIRER -->
+        <div id="gamesBluetoothContainer" class="games-subview">
+          <div id="btStatusBanner" class="games-banner bt-banner">
+            🔵 Pair any Bluetooth controller (<strong>Xbox, PS4/PS5 DualShock/DualSense, 8BitDo, Ipega, GameSir</strong>) to the Redmi Note 8 Pro without touching the broken screen!
+          </div>
+
+          <div class="bt-action-buttons">
+            <button id="btnScanBluetooth" class="proj-btn primary bt-primary-btn" type="button">
+              🔍 Scan Nearby Bluetooth Controllers
+            </button>
+            <div class="projector-subactions">
+              <button id="btnOpenRareBluetooth" class="proj-btn secondary" type="button">
+                📂 Show Additional / Unnamed Devices
+              </button>
+              <button id="btnRefreshBluetooth" class="proj-btn secondary" type="button">
+                🔄 Refresh BT Status
+              </button>
+            </div>
+          </div>
+
+          <div id="btActiveGamepadsBox" class="bt-active-gamepads hidden"></div>
+
+          <div class="projector-list-header">Paired &amp; Discovered Controllers in Range:</div>
+          <div id="btDevicesList" class="projector-devices-list">
+            <div class="projector-empty">
+              Put your Bluetooth controller in pairing mode (rapidly blinking LED) and tap <strong>Scan Nearby Bluetooth Controllers</strong>.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- APP DRAWER MODAL (ANDROID TV + LINUX DESKTOP) -->
+    <div id="appsModal" class="modal-backdrop hidden">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h2>🚀 System Quick Launcher</h2>
+          <button id="btnCloseModal" class="icon-btn" type="button">✕</button>
+        </div>
+        <div id="appsGrid" class="apps-grid"></div>
+      </div>
+    </div>
+
+    <!-- UNIVERSAL CENTRAL MODAL: ANY TV / PROJECTOR & PORTABLE WI-FI -->
+    <div id="projectorModal" class="modal-backdrop hidden">
+      <div class="modal-sheet projector-sheet">
+        <div class="modal-header">
+          <h2>📽️ TV, Projector &amp; Portable Wi-Fi</h2>
+          <button id="btnCloseProjectorModal" class="icon-btn" type="button">✕</button>
+        </div>
+
+        <!-- MODAL TAB SELECTOR (TAB 1: ANY TV/PROJECTOR | TAB 2: PORTABLE WI-FI & RESCUE HOTSPOT) -->
+        <div class="subview-tabs modal-portable-tabs" style="margin-bottom: 12px;">
+          <button id="tabModalProjector" class="subtab-btn active" type="button">
+            📽️ Any TV or Projector
+          </button>
+          <button id="tabModalWifi" class="subtab-btn" type="button">
+            📡 Portable Wi-Fi &amp; Travel
+          </button>
+        </div>
+
+        <!-- ==================== TAB 1: ANY TV OR PROJECTOR (MIRACAST / SMART TV / DLNA / HDMI CABLE) ==================== -->
+        <div id="modalTabProjectorContent" class="portable-tab-panel active">
+          <div id="projectorStatusBanner" class="projector-status-banner">
+            On your <strong>Smart TV</strong> (Samsung, LG, Sony, TCL, Roku, Fire TV) or <strong>Projector</strong> (Miracast / Wireless Display), open <strong>Screen Mirroring / Miracast / Cast</strong> and tap below:
+          </div>
+
+          <div class="projector-actions">
+            <button id="btnScanProjector" class="proj-btn primary" type="button">
+              📡 Scan Any TV or Projector (Auto-Connect)
+            </button>
+            <div class="projector-subactions" style="margin-top: 6px;">
+              <button id="btnUseHdmiCable" class="proj-btn secondary hdmi-highlight-btn" type="button">
+                🔌 Use HDMI Cable / DisplayLink
+              </button>
+              <button id="btnWakePhoneScreen" class="proj-btn secondary" type="button">
+                ☀️ Wake Phone Screen (Keep Awake)
+              </button>
+            </div>
+            <div class="projector-subactions" style="margin-top: 6px;">
+              <button id="btnMiuiCast" class="proj-btn secondary" type="button">
+                📱 MIUI Cast (Smart TV / Phone)
+              </button>
+              <button id="btnLocateProjectorIp" class="proj-btn secondary" type="button">
+                📍 Locate TV/Projector on LAN
+              </button>
+            </div>
+            <div class="projector-subactions" style="margin-top: 6px;">
+              <button id="btnWindowsCast" class="proj-btn secondary" type="button">
+                💻 Cast from Laptop (Win+K)
+              </button>
+              <button class="proj-btn secondary" type="button" data-proj-mode="clone">
+                🪞 Mirror Screen (Duplicate)
+              </button>
+            </div>
+            <div class="projector-subactions" style="margin-top: 6px;">
+              <button class="proj-btn secondary" type="button" data-proj-mode="extend">
+                📐 Extend (2nd Screen)
+              </button>
+              <button class="proj-btn secondary" type="button" data-proj-mode="internal">
+                🔌 Use PC / Phone Screen Only
+              </button>
+            </div>
+          </div>
+
+          <div class="projector-list-header">Discovered Smart TVs &amp; Projectors Nearby:</div>
+          <div id="projectorDevicesList" class="projector-devices-list">
+            <div class="projector-empty">Tap "Scan Any TV or Projector" to scan for Smart TVs, Miracast, and DLNA receivers.</div>
+          </div>
+        </div>
+
+        <!-- ==================== TAB 2: PORTABLE WI-FI & TRAVEL MODE (ANY WI-FI + RESCUE HOTSPOT) ==================== -->
+        <div id="modalTabWifiContent" class="portable-tab-panel hidden">
+          <div id="wifiStatusBanner" class="projector-status-banner wifi-banner">
+            📡 Connect the <strong>Redmi Note 8 Pro</strong> to any travel Wi-Fi directly from here (zero touch on the broken screen) or use the <strong>Rescue Hotspot</strong>!
+          </div>
+
+          <!-- CARD 1: CURRENT WI-FI STATUS + UNIVERSAL mDNS ADDRESS -->
+          <div class="wifi-portable-card">
+            <div class="wifi-current-row">
+              <div class="wifi-current-main">
+                <span class="wifi-current-label">Phone Connected Wi-Fi:</span>
+                <span id="wifiCurrentSsidText" class="wifi-current-ssid">🟢 Checking...</span>
+              </div>
+              <span id="wifiCurrentSignalBadge" class="wifi-signal-pill">5GHz • 100%</span>
+            </div>
+            <div class="wifi-meta-grid">
+              <div class="wifi-meta-item">
+                <span class="wifi-meta-key">Current IP (wlan0):</span>
+                <code id="wifiCurrentIpCode">hybridbox.local</code>
+              </div>
+              <div class="wifi-meta-item">
+                <span class="wifi-meta-key">Router Gateway:</span>
+                <code id="wifiCurrentGwCode">Auto (DHCP)</code>
+              </div>
+            </div>
+            <div class="wifi-mdns-box">
+              <div class="wifi-mdns-info">
+                <span>🌐 <strong>Universal Address (mDNS ZeroConf):</strong> Works on any Wi-Fi!</span>
+                <code id="wifiMdnsUrlDisplay">http://hybridbox.local:8080</code>
+              </div>
+              <button id="btnCopyMdnsUrl" class="projector-connect-btn" type="button">
+                📋 Copy Link
+              </button>
+            </div>
+          </div>
+
+          <!-- CARD 2: SCAN & CONNECT TO ANY LOCAL WI-FI NETWORK -->
+          <div class="projector-actions" style="margin-top: 10px; margin-bottom: 10px;">
+            <button id="btnScanWifiNetworks" class="proj-btn primary wifi-scan-primary-btn" type="button">
+              🔍 Scan Nearby Wi-Fi Networks
+            </button>
+          </div>
+
+          <div id="wifiConnectFormBox" class="wifi-connect-form-box">
+            <div class="projector-list-header" style="margin-bottom: 6px;">Connect or Pre-Save Wi-Fi Network:</div>
+            <div class="add-controller-row">
+              <input
+                id="wifiTargetSsidInput"
+                type="text"
+                class="new-ctrl-name-input"
+                autocomplete="off"
+                placeholder="Wi-Fi Name (SSID)"
+              />
+              <select id="wifiTargetSecSelect" class="rom-system-select wifi-sec-select">
+                <option value="wpa2" selected>🔒 WPA2 / WPA3</option>
+                <option value="wpa3">🛡️ WPA3-SAE</option>
+                <option value="open">🔓 Open (No Password)</option>
+              </select>
+            </div>
+            <div id="wifiPasswordRow" class="add-controller-row" style="margin-top: 8px;">
+              <input
+                id="wifiTargetPassInput"
+                type="password"
+                class="new-ctrl-name-input"
+                autocomplete="off"
+                placeholder="Wi-Fi Password (min. 8 chars)"
+              />
+              <button id="btnToggleWifiPass" class="proj-btn secondary wifi-eye-btn" type="button" title="Show/Hide Password">
+                👁️ Show
+              </button>
+            </div>
+            <div class="projector-subactions" style="margin-top: 8px;">
+              <button id="btnConnectWifiSubmit" class="proj-btn primary" type="button">
+                🔗 Connect / Save Wi-Fi
+              </button>
+              <button id="btnPreSaveWifiSubmit" class="proj-btn secondary" type="button">
+                💾 Pre-Save for Travel Only
+              </button>
+            </div>
+          </div>
+
+          <div class="projector-list-header" style="margin-top: 12px;">Nearby Wi-Fi Networks Found:</div>
+          <div id="wifiNetworksList" class="projector-devices-list">
+            <div class="projector-empty">
+              Tap <strong>🔍 Scan Nearby Wi-Fi Networks</strong> to list all nearby Wi-Fi networks with signal strength.
+            </div>
+          </div>
+
+          <!-- CARD 3: 🆘 RESCUE HOTSPOT (TRAVEL MODE — ZERO TOUCH ON BROKEN SCREEN) -->
+          <div class="wifi-rescue-card" style="margin-top: 14px;">
+            <div class="wifi-rescue-header">
+              <span>🆘 Rescue Hotspot (Automatic Travel Mode)</span>
+              <span class="wifi-rescue-badge">Auto-Reconnects &gt;20s</span>
+            </div>
+            <ol class="wifi-rescue-steps">
+              <li>On any trip or hotel, turn on your phone's <strong>Wi-Fi Hotspot</strong> with the SSID and password below;</li>
+              <li>When the Redmi Note 8 Pro has no Wi-Fi for 20s, it <strong>automatically scans and connects</strong> to your Hotspot;</li>
+              <li>Open <code>http://hybridbox.local:8080</code> on your phone and pick the local Wi-Fi and TV/Projector!</li>
+            </ol>
+            <div class="add-controller-row" style="margin-top: 8px;">
+              <input
+                id="rescueHotspotSsidInput"
+                type="text"
+                class="new-ctrl-name-input"
+                value="HybridBox"
+                placeholder="Hotspot Name (e.g. HybridBox)"
+              />
+              <input
+                id="rescueHotspotPassInput"
+                type="text"
+                class="new-ctrl-name-input"
+                value="hybridbox123"
+                placeholder="Hotspot Password (e.g. hybridbox123)"
+              />
+            </div>
+            <div class="projector-subactions" style="margin-top: 8px;">
+              <button id="btnSaveRescueHotspot" class="proj-btn primary" type="button">
+                🆘 Save Rescue Hotspot
+              </button>
+              <button id="btnTestRescueHotspot" class="proj-btn secondary" type="button">
+                📡 Test / Connect Hotspot
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MANAGE & ADD MORE CONTROLLERS MODAL (SNES / ARCADE / MEGA DRIVE SKINS + P1-P4 MULTIPLAYER) -->
+    <div id="moreControllersModal" class="modal-backdrop hidden">
+      <div class="modal-sheet controllers-modal-sheet">
+        <div class="modal-header">
+          <h2>🎮 Controllers, Skins &amp; Multiplayer</h2>
+          <button id="btnCloseControllersModal" class="icon-btn" type="button">✕</button>
+        </div>
+
+        <div id="controllersModalBanner" class="projector-status-banner">
+          🍄 Pick your <strong>controller skin/photo</strong> (Super Nintendo, Arcade Stick, or 6-Button Mega Drive), add <strong>extra controllers (Player 1 to 4)</strong>, or connect a 2nd phone over Wi-Fi!
+        </div>
+
+        <!-- Quick Actions: Full Screen Landscape + Pair Bluetooth -->
+        <div class="projector-subactions" style="margin-bottom: 12px;">
+          <button id="btnModalEnterFullscreen" class="proj-btn primary" type="button">
+            ⛶ Open Controller in Full Screen Landscape
+          </button>
+          <button id="btnModalPairBluetooth" class="proj-btn secondary" type="button">
+            🔵 Pair Physical Bluetooth Controller
+          </button>
+        </div>
+
+        <!-- Controller Skins & Photos Gallery -->
+        <div class="projector-list-header">1. Virtual Controller Models &amp; Photos:</div>
+        <div id="controllerSkinsGallery" class="controller-skins-gallery">
+          <div class="controller-skin-card active" data-skin-card="snes">
+            <img src="/static/icons/snes-controller-photo.jpg" alt="Super Nintendo (SNES)" class="skin-card-photo" />
+            <div class="skin-card-body">
+              <div class="skin-card-title">🍄 Super Nintendo (SNES Classic)</div>
+              <div class="skin-card-desc">Original gray shell, classic D-Pad, slanted Select/Start, and 4-color X/Y/A/B diamond.</div>
+              <button type="button" class="projector-connect-btn skin-apply-btn" data-apply-skin="snes">Use SNES Classic</button>
+            </div>
+          </div>
+
+          <div class="controller-skin-card" data-skin-card="snes_us">
+            <img src="/static/icons/snes-us-controller-photo.jpg" alt="Super Nintendo US (Purple)" class="skin-card-photo" />
+            <div class="skin-card-body">
+              <div class="skin-card-title">🟣 Super Nintendo US (Purple / Lavender)</div>
+              <div class="skin-card-desc">North American edition with concave lavender X/Y and convex purple A/B buttons.</div>
+              <button type="button" class="projector-connect-btn skin-apply-btn" data-apply-skin="snes_us">Use SNES US</button>
+            </div>
+          </div>
+
+          <div class="controller-skin-card" data-skin-card="mame">
+            <img src="/static/icons/arcade-controller-photo.jpg" alt="Arcade Fightstick" class="skin-card-photo" />
+            <div class="skin-card-body">
+              <div class="skin-card-title">🕹️ Arcade Fightstick (MAME / NeoGeo 6-Btn)</div>
+              <div class="skin-card-desc">Red arcade joystick + 6 illuminated action buttons (A, B, C, X, Y, Z) + Insert Coin.</div>
+              <button type="button" class="projector-connect-btn skin-apply-btn" data-apply-skin="mame">Use Arcade Stick</button>
+            </div>
+          </div>
+
+          <div class="controller-skin-card" data-skin-card="megadrive">
+            <img src="/static/icons/megadrive-controller-photo.jpg" alt="Sega Mega Drive 6-Button" class="skin-card-photo" />
+            <div class="skin-card-body">
+              <div class="skin-card-title">🦔 Sega Mega Drive (6-Button Street Fighter)</div>
+              <div class="skin-card-desc">Classic 6-button Sega pad (X, Y, Z + A, B, C) with red Start button.</div>
+              <button type="button" class="projector-connect-btn skin-apply-btn" data-apply-skin="megadrive">Use Mega Drive</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form to Add More Controllers -->
+        <div class="projector-list-header" style="margin-top: 14px;">2. Add More Controllers (Player 1 to Player 4):</div>
+        <div class="add-controller-box">
+          <div class="add-controller-row">
+            <select id="newCtrlPlayerSelect" class="rom-system-select">
+              <option value="1">🎮 Player 1 (Main Controller)</option>
+              <option value="2" selected>🎮 Player 2 (2nd Controller)</option>
+              <option value="3">🎮 Player 3 (3rd Controller)</option>
+              <option value="4">🎮 Player 4 (4th Controller)</option>
+            </select>
+            <select id="newCtrlSkinSelect" class="rom-system-select">
+              <option value="snes">🍄 Super Nintendo (SNES)</option>
+              <option value="snes_us">🟣 Super Nintendo US (Purple)</option>
+              <option value="mame">🕹️ Arcade Fightstick (6-Btn)</option>
+              <option value="megadrive">🦔 Sega Mega Drive (6-Btn)</option>
+            </select>
+          </div>
+          <div class="add-controller-row" style="margin-top: 8px;">
+            <input
+              id="newCtrlNameInput"
+              type="text"
+              class="new-ctrl-name-input"
+              placeholder="Optional name (e.g. P2 Pad)..."
+            />
+            <button id="btnAddCustomController" class="proj-btn primary add-ctrl-submit-btn" type="button">
+              ➕ Add Controller
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Controllers List -->
+        <div class="projector-list-header" style="margin-top: 12px;">Active Controllers in Room:</div>
+        <div id="configuredControllersList" class="projector-devices-list"></div>
+
+        <!-- Multiplayer Card: Use 2nd Phone on Wi-Fi as Player 2 -->
+        <div class="projector-list-header" style="margin-top: 14px;">3. Connect 2nd Phone as Controller 2 (Wi-Fi):</div>
+        <div class="multiplayer-wifi-card">
+          <div class="mp-wifi-info">
+            Open the link below on another phone on the same Wi-Fi network to join directly as <strong>Controller 2 (Player 2) in Full Screen Landscape</strong>:
+          </div>
+          <div class="ssh-cmd-box">
+            <code id="player2WifiUrl">http://hybridbox.local:8080/?mode=games&amp;player=2&amp;skin=snes&amp;fullscreen=1</code>
+          </div>
+          <div class="projector-subactions" style="margin-top: 6px;">
+            <button id="btnCopyPlayer2Link" class="proj-btn secondary" type="button">
+              📋 Copy Player 2 Link
+            </button>
+            <button id="btnSwitchThisPhoneToP2" class="proj-btn secondary" type="button">
+              🎮 Use This Device as Player 2
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=23"></script>
+</body>
+</html>

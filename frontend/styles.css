@@ -1,0 +1,3996 @@
+:root {
+  --bg-primary: #090b10;
+  --bg-elevated: #111520;
+  --bg-panel: #161b29;
+  --bg-glass: rgba(22, 27, 41, 0.86);
+  --border-subtle: rgba(148, 163, 184, 0.14);
+  --border-highlight: rgba(56, 189, 248, 0.45);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --accent-tv: #38bdf8;
+  --accent-linux: #a855f7;
+  --accent-green: #22c55e;
+  --accent-amber: #f59e0b;
+  --accent-red: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: max(8px, env(safe-area-inset-top, 8px)) 10px max(10px, env(safe-area-inset-bottom, 10px));
+  gap: 8px;
+}
+
+/* ==================== TOPBAR ==================== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 5px 8px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.status-battery-pill,
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: #e2e8f0;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.status-battery-pill:active {
+  transform: scale(0.95);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  box-shadow: 0 0 8px var(--accent-amber);
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
+}
+
+.status-dot.offline {
+  background: var(--accent-red);
+  box-shadow: 0 0 8px var(--accent-red);
+}
+
+.status-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.mode-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  background: #0b0e17;
+  border-radius: 12px;
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 6px;
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+
+.mode-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mode-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mode-btn.active[data-mode="tv"] {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45);
+}
+
+.mode-btn.active[data-mode="linux"] {
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.45);
+}
+
+.mode-btn.active[data-mode="games"] {
+  background: linear-gradient(135deg, #ef4444, #f59e0b);
+  color: #ffffff;
+  box-shadow: 0 2px 12px rgba(239, 68, 68, 0.48);
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.icon-btn:active {
+  transform: scale(0.93);
+  border-color: var(--border-highlight);
+}
+
+@media (max-width: 420px) {
+  .topbar {
+    gap: 6px;
+    padding: 5px 6px;
+  }
+  .status-battery-pill,
+  .status-pill {
+    height: 33px;
+    padding: 0 8px;
+    font-size: 10.5px;
+    gap: 4.5px;
+  }
+  .mode-switcher {
+    height: 33px;
+    gap: 3px;
+    padding: 2.5px;
+  }
+  .mode-btn {
+    font-size: 11px;
+    gap: 3.5px;
+    padding: 0 5px;
+  }
+  .mode-icon {
+    width: 13px;
+    height: 13px;
+    font-size: 12px;
+  }
+  .top-actions {
+    gap: 3.5px;
+  }
+  .top-actions .icon-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 13.5px;
+  }
+}
+
+@media (max-width: 365px) {
+  .topbar {
+    gap: 5px;
+    padding: 4px 5px;
+  }
+  .status-battery-pill,
+  .status-pill {
+    height: 31px;
+    padding: 0 7px;
+    font-size: 10px;
+    gap: 4px;
+  }
+  .mode-switcher {
+    height: 31px;
+    gap: 2.5px;
+    padding: 2px;
+  }
+  .mode-btn {
+    font-size: 10.2px;
+    gap: 3px;
+    padding: 0 4px;
+  }
+  .mode-icon {
+    width: 12px;
+    height: 12px;
+    font-size: 11px;
+  }
+  .top-actions {
+    gap: 3px;
+  }
+  .top-actions .icon-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+  }
+}
+
+/* ==================== KEYBOARD BAR ==================== */
+.keyboard-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-highlight);
+  border-radius: 14px;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+.keyboard-bar.hidden {
+  display: none;
+}
+
+.keyboard-bar input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  background: #090d16;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 0 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.kbd-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  padding: 0 11px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.kbd-action-btn.primary {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+
+/* ==================== QUICK LAUNCH STRIP ==================== */
+.quick-launch-strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.quick-launch-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.quick-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.quick-chip:active {
+  transform: scale(0.95);
+  border-color: var(--accent-tv);
+}
+
+/* ==================== MAIN STAGE & VIEWS ==================== */
+.main-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-panel {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.view-panel.active {
+  display: flex;
+}
+
+/* ==================== TV SUBTABS & D-PAD ==================== */
+.subview-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.subview-tabs.games-subtabs {
+  grid-template-columns: 1.38fr 1.12fr 0.82fr;
+  gap: 4px;
+}
+
+.subtab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.games-subtabs .subtab-btn {
+  font-size: 10px;
+  padding: 0 4px;
+  gap: 3px;
+  letter-spacing: -0.2px;
+}
+
+.subtab-btn.active {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.dpad-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.dpad-wheel {
+  position: relative;
+  width: min(236px, 60vw);
+  height: min(236px, 60vw);
+  border-radius: 50%;
+  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 70%, #090d16 100%);
+  border: 2px solid rgba(56, 189, 248, 0.28);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.65),
+    inset 0 2px 12px rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto 0;
+  touch-action: none;
+}
+
+.dpad-btn {
+  position: absolute;
+  width: 68px;
+  height: 68px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 20px;
+}
+
+.dpad-btn svg {
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+  display: block;
+}
+
+.dpad-btn:active {
+  background: rgba(56, 189, 248, 0.22);
+  color: var(--accent-tv);
+}
+
+.dpad-btn.up {
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.dpad-btn.down {
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.dpad-btn.left {
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.dpad-btn.right {
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.dpad-center {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  background: linear-gradient(145deg, #1e293b, #0f172a);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.dpad-center:active {
+  transform: scale(0.94);
+  background: linear-gradient(145deg, #0284c7, #1d4ed8);
+}
+
+/* ==================== NAV & MEDIA DECK ==================== */
+.nav-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.nav-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 58px;
+  padding: 6px 4px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.nav-pill:active {
+  transform: scale(0.95);
+  border-color: var(--accent-tv);
+  background: var(--bg-panel);
+}
+
+.pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.pill-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.media-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.deck-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.deck-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 44px;
+  padding: 0 6px;
+  border-radius: 13px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.deck-btn.play-pause {
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.deck-btn:active {
+  transform: scale(0.95);
+  border-color: var(--accent-tv);
+}
+
+/* ==================== TRACKPAD MULTITOQUE (LINUX / ANDROID CURSOR) ==================== */
+.trackpad-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(124, 58, 237, 0.12), transparent 65%),
+    linear-gradient(180deg, #111522 0%, #0b0e17 100%);
+  border: 1.5px solid rgba(168, 85, 247, 0.32);
+  box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.trackpad-watermark {
+  text-align: center;
+  padding: 20px;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.watermark-icon {
+  font-size: 38px;
+  margin-bottom: 6px;
+}
+
+.watermark-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.watermark-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.touch-ripple {
+  position: absolute;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgba(168, 85, 247, 0.75);
+  background: rgba(168, 85, 247, 0.18);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.touch-ripple.hidden {
+  display: none;
+}
+
+.linux-macro-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.macro-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.macro-btn:active {
+  transform: scale(0.95);
+  border-color: var(--accent-linux);
+}
+
+.mouse-buttons-bar {
+  display: grid;
+  grid-template-columns: 1.3fr 0.8fr 1.3fr;
+  gap: 8px;
+  height: 54px;
+  flex-shrink: 0;
+}
+
+.mouse-hw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border-radius: 15px;
+  border: 1px solid rgba(168, 85, 247, 0.32);
+  background: linear-gradient(180deg, #1b2234 0%, #121726 100%);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.mouse-hw-btn:active,
+.mouse-hw-btn.pressed {
+  background: linear-gradient(180deg, #6d28d9 0%, #4c1d95 100%);
+  border-color: #c084fc;
+}
+
+.mouse-scroll-strip {
+  border-radius: 15px;
+  border: 1px dashed var(--border-subtle);
+  background: #0d111c;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+
+/* ==================== APPS MODAL ==================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 12, 0.78);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-backdrop.hidden {
+  display: none;
+}
+
+.modal-sheet {
+  width: 100%;
+  max-width: 540px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-highlight);
+  border-radius: 24px 24px 0 0;
+  padding: 16px;
+  max-height: 80dvh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.modal-header h2 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.apps-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 10px;
+}
+
+.app-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  height: 100%;
+  padding: 10px 11px;
+  border-radius: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-card:active {
+  transform: scale(0.96);
+  border-color: var(--accent-tv);
+}
+
+.app-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.app-card-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-card-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.app-card-tag {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+/* ==================== PROJECTOR (WI-FI / MIRACAST / DLNA) ==================== */
+.projector-top-btn {
+  border-color: rgba(236, 72, 153, 0.45);
+  background: linear-gradient(145deg, rgba(236, 72, 153, 0.18), rgba(124, 58, 237, 0.18));
+}
+
+.projector-chip {
+  border-color: rgba(236, 72, 153, 0.55);
+  background: linear-gradient(135deg, rgba(219, 39, 119, 0.28), rgba(124, 58, 237, 0.28));
+  color: #fdf2f8;
+}
+
+.wifi-portable-chip {
+  border-color: rgba(14, 165, 233, 0.55);
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.28), rgba(16, 185, 129, 0.24));
+  color: #e0f2fe;
+}
+
+.modal-portable-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.portable-tab-panel.hidden {
+  display: none;
+}
+
+.hdmi-highlight-btn {
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #d1fae5 !important;
+}
+
+.wifi-banner {
+  border-color: rgba(14, 165, 233, 0.4);
+  background: rgba(8, 25, 48, 0.85);
+}
+
+.wifi-portable-card {
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wifi-current-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wifi-current-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wifi-current-label {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.wifi-current-ssid {
+  font-size: 14px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.wifi-signal-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #6ee7b7;
+  white-space: nowrap;
+}
+
+.wifi-signal-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.wifi-signal-bars .wifi-bar {
+  display: inline-block;
+  width: 3px;
+  border-radius: 1.5px;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.wifi-signal-bars .wifi-bar.b1 { height: 4px; }
+.wifi-signal-bars .wifi-bar.b2 { height: 7px; }
+.wifi-signal-bars .wifi-bar.b3 { height: 10px; }
+.wifi-signal-bars .wifi-bar.b4 { height: 13px; }
+
+.wifi-signal-bars.good .wifi-bar.active { background: #34d399; }
+.wifi-signal-bars.mid .wifi-bar.active { background: #fbbf24; }
+.wifi-signal-bars.weak .wifi-bar.active { background: #f87171; }
+
+.wifi-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.wifi-meta-item {
+  background: rgba(9, 11, 16, 0.65);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wifi-meta-key {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.wifi-meta-item code {
+  font-size: 12px;
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.wifi-mdns-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(99, 102, 241, 0.15));
+  border: 1px solid rgba(56, 189, 248, 0.38);
+}
+
+.wifi-mdns-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.wifi-mdns-info code {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #7dd3fc;
+  word-break: break-all;
+}
+
+.wifi-scan-primary-btn {
+  background: linear-gradient(135deg, #0284c7, #2563eb) !important;
+  border-color: rgba(56, 189, 248, 0.55) !important;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35) !important;
+}
+
+.wifi-connect-form-box {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.wifi-sec-select {
+  max-width: 150px;
+}
+
+.wifi-eye-btn {
+  max-width: 105px;
+  flex-shrink: 0;
+}
+
+.wifi-rescue-card {
+  background: linear-gradient(145deg, rgba(30, 27, 75, 0.6), rgba(15, 23, 42, 0.85));
+  border: 1px solid rgba(244, 63, 94, 0.42);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.wifi-rescue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #fecdd3;
+  margin-bottom: 6px;
+}
+
+.wifi-rescue-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(244, 63, 94, 0.22);
+  border: 1px solid rgba(251, 113, 133, 0.45);
+  color: #fda4af;
+  white-space: nowrap;
+}
+
+.wifi-rescue-steps {
+  margin: 0 0 8px 18px;
+  padding: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.wifi-rescue-steps li {
+  margin-bottom: 3px;
+}
+
+.projector-status-banner {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.projector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.projector-subactions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.proj-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 44px;
+  min-width: 0;
+  border-radius: 12px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.projector-subactions .proj-btn {
+  height: 46px;
+  min-height: 46px;
+}
+
+.proj-btn:active {
+  transform: scale(0.97);
+}
+
+.proj-btn.primary {
+  background: linear-gradient(135deg, #db2777, #7c3aed);
+  border-color: rgba(244, 114, 182, 0.55);
+  box-shadow: 0 4px 14px rgba(219, 39, 119, 0.35);
+}
+
+.proj-btn.secondary {
+  background: var(--bg-panel);
+  font-size: 11px;
+}
+
+.projector-list-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.projector-devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.projector-empty {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.projector-device-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 58px;
+  height: 58px;
+  padding: 8px 12px;
+  border-radius: 13px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+}
+
+.ctrl-room-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ctrl-room-thumb {
+  width: 52px;
+  height: 32px;
+  object-fit: contain;
+  background: #090b10;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.ctrl-room-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ctrl-room-del-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+}
+
+.projector-device-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.projector-device-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.projector-device-meta {
+  font-size: 9.8px;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.projector-connect-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ==================== SESSÃO GAMES (SNES / MAME ARCADE / BLUETOOTH) ==================== */
+.games-chip {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(245, 158, 11, 0.22));
+  color: #fef3c7;
+}
+
+.bt-chip {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.25), rgba(14, 165, 233, 0.25));
+  color: #dbeafe;
+}
+
+.games-subview {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.games-subview::-webkit-scrollbar {
+  display: none;
+}
+
+.games-subview.active {
+  display: flex;
+}
+
+/* ==================== BARRA DE TOPO DO CONTROLE (VOLTAR + FICHA + START + JOGOS + CONTROLES + FULL LANDSCAPE) ==================== */
+.gamepad-top-hud {
+  display: grid;
+  grid-template-columns: 0.9fr 1.05fr 0.85fr 0.95fr 1.15fr 1.25fr;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 6px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #161c2d 0%, #0d111c 100%);
+  border: 1.5px solid rgba(250, 204, 21, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
+}
+
+@media (max-width: 560px) {
+  body:not(.gamepad-fullscreen-landscape) .gamepad-top-hud {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .gp-top-hud-btn {
+    font-size: 10.5px;
+    height: 32px;
+    padding: 0 4px;
+    gap: 3px;
+  }
+}
+
+.gp-top-hud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 5px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: none;
+  transition: transform 0.1s ease, filter 0.12s ease;
+}
+
+.gp-top-hud-btn:active,
+.gp-top-hud-btn.pressed {
+  transform: scale(0.94);
+  filter: brightness(1.25);
+}
+
+.gp-top-hud-btn.back-btn {
+  background: linear-gradient(135deg, #334155, #1e293b);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
+
+.gp-top-hud-btn.coin-btn {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  border-color: #fde047;
+  color: #fef9c3;
+  box-shadow: 0 2px 10px rgba(234, 179, 8, 0.35);
+}
+
+.coin-counter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(9, 11, 16, 0.72);
+  border: 1px solid rgba(254, 240, 138, 0.65);
+  color: #fde047;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.gp-top-hud-btn.start-btn {
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  border-color: rgba(252, 165, 165, 0.6);
+  color: #ffffff;
+}
+
+.gp-top-hud-btn.more-ctrl-btn {
+  background: linear-gradient(135deg, #6d28d9, #4c1d95);
+  border-color: rgba(192, 132, 252, 0.6);
+  color: #f3e8ff;
+}
+
+.player-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.gp-top-hud-btn.fullscreen-btn {
+  background: linear-gradient(135deg, #0284c7, #1d4ed8);
+  border-color: rgba(125, 211, 252, 0.65);
+  color: #e0f2fe;
+}
+
+.gp-top-hud-btn.fullscreen-btn.active {
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  border-color: #fda4af;
+  color: #fff1f2;
+}
+
+.gamepad-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.gamepad-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.gamepad-console-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fde68a;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+#activeConsoleIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+#activeConsoleLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.photo-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(30, 41, 59, 0.7);
+  color: #cbd5e1;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.photo-mode-pill.active {
+  border-color: rgba(250, 204, 21, 0.65);
+  background: rgba(234, 179, 8, 0.22);
+  color: #fef08a;
+}
+
+.bt-gamepad-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: rgba(37, 99, 235, 0.22);
+  color: #bfdbfe;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bt-gamepad-pill.connected {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(22, 163, 74, 0.25);
+  color: #bbf7d0;
+}
+
+/* Faixa Rápida de Seleção de Controles (SNES, Arcade, Mega Drive, Player 2, + Controles) */
+.controller-quick-strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.controller-quick-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.ctrl-skin-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.ctrl-skin-chip.active {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.28), rgba(245, 158, 11, 0.28));
+  border-color: #f59e0b;
+  color: #fef3c7;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
+}
+
+.ctrl-skin-chip.add-ctrl-chip {
+  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(124, 58, 237, 0.22);
+  color: #e9d5ff;
+}
+
+/* Gatilhos de Ombro Superiores (L1 / L2 / Turbo / R2 / R1) */
+.snes-shoulder-row {
+  display: grid;
+  grid-template-columns: 1.1fr 0.85fr 1.45fr 0.85fr 1.1fr;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.shoulder-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 6px;
+  border-radius: 14px 14px 8px 8px;
+  border: 1.5px solid rgba(148, 163, 184, 0.36);
+  background: linear-gradient(180deg, #475569 0%, #1e293b 100%);
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.shoulder-btn:active,
+.shoulder-btn.pressed {
+  transform: translateY(2px);
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  border-color: #fde68a;
+  color: #090b10;
+}
+
+.turbo-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 36px;
+  padding: 0 4px;
+  border-radius: 10px;
+  border: 1px dashed rgba(245, 158, 11, 0.45);
+  background: rgba(15, 23, 42, 0.85);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.turbo-toggle-btn.active {
+  border-style: solid;
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.22);
+  color: #fde68a;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+}
+
+/* ==================== CARCAÇA DO CONTROLE SUPER NINTENDO COM FOTO REALISTA ==================== */
+.snes-controller-shell {
+  position: relative;
+  flex: 1;
+  min-height: 196px;
+  max-height: 268px;
+  margin: auto 0;
+  display: grid;
+  grid-template-columns: 1.05fr 0.9fr 1.05fr;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 10px;
+  border-radius: 44px;
+  background:
+    radial-gradient(circle at 18% 50%, rgba(255, 255, 255, 0.16), transparent 48%),
+    radial-gradient(circle at 82% 50%, rgba(30, 41, 59, 0.22), transparent 48%),
+    linear-gradient(180deg, #c6cbd2 0%, #aeb4be 54%, #878e99 100%);
+  border: 3px solid rgba(241, 245, 249, 0.65);
+  box-shadow:
+    inset 0 3px 12px rgba(255, 255, 255, 0.55),
+    inset 0 -5px 14px rgba(0, 0, 0, 0.45),
+    0 10px 26px rgba(0, 0, 0, 0.72);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.snes-controller-shell[data-skin="mame"] {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.4), transparent 70%),
+    linear-gradient(180deg, #334155 0%, #1e293b 55%, #0f172a 100%);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.snes-controller-shell[data-skin="megadrive"] {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(51, 65, 85, 0.35), transparent 70%),
+    linear-gradient(180deg, #27272a 0%, #18181b 60%, #09090b 100%);
+  border-color: rgba(113, 113, 122, 0.5);
+}
+
+.snes-dpad-zone,
+.snes-center-shell-zone,
+.snes-abxy-zone {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* Centro do Controle SNES: Marca + Foto Realista Integrada + Botões SELECT & START Inclinados */
+.snes-center-shell-zone {
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: 4px 2px;
+  gap: 8px;
+}
+
+.snes-brand-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.84);
+  border: 1px solid rgba(226, 232, 240, 0.32);
+  padding: 3px 8px;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 220px;
+}
+
+.snes-brand-title {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  color: #f8fafc;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.snes-brand-sub {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #fde047;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Moldura da Foto Realista do Controle no Centro da Carcaça */
+.snes-photo-showcase {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 54px;
+  max-height: 118px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #090c14;
+  border: 1.5px solid rgba(226, 232, 240, 0.38);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.snes-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  opacity: 0.35;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.snes-controller-shell.photo-mode-active .snes-photo-showcase {
+  border-color: rgba(250, 204, 21, 0.72);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.68), 0 0 10px rgba(250, 204, 21, 0.22);
+}
+
+.snes-controller-shell.photo-mode-active .snes-photo-img {
+  opacity: 1;
+  transform: scale(1.03);
+}
+
+.snes-slanted-pills {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.snes-slanted-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+  touch-action: none;
+}
+
+.snes-slanted-btn .slanted-bar {
+  width: 30px;
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #374151 0%, #111827 100%);
+  border: 1.5px solid rgba(226, 232, 240, 0.5);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.65);
+  transform: rotate(-28deg);
+  transition: transform 0.1s ease, background 0.12s ease;
+}
+
+.snes-slanted-btn.start-slanted .slanted-bar {
+  border-color: rgba(248, 113, 113, 0.75);
+}
+
+.snes-slanted-btn:active .slanted-bar,
+.snes-slanted-btn.pressed .slanted-bar {
+  transform: rotate(-28deg) scale(0.92);
+  background: linear-gradient(180deg, #f59e0b 0%, #b45309 100%);
+  border-color: #fef08a;
+}
+
+.snes-slanted-btn .slanted-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  color: #111827;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-slanted-btn .slanted-label,
+.snes-controller-shell[data-skin="megadrive"] .snes-slanted-btn .slanted-label {
+  color: #f8fafc;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.snes-cross {
+  position: relative;
+  width: min(166px, 35vw);
+  height: min(166px, 35vw);
+  border-radius: 50%;
+  background: radial-gradient(circle, #9ca3af 0%, #7d8490 100%);
+  border: 2.5px solid rgba(71, 85, 105, 0.48);
+  box-shadow:
+    inset 0 3px 10px rgba(0, 0, 0, 0.45),
+    0 2px 6px rgba(255, 255, 255, 0.35);
+  touch-action: none;
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-cross,
+.snes-controller-shell[data-skin="megadrive"] .snes-cross {
+  background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.snes-dir {
+  position: absolute;
+  border: 1.5px solid rgba(203, 213, 225, 0.35);
+  background: linear-gradient(145deg, #334155, #0f172a);
+  color: #f1f5f9;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
+  touch-action: none;
+}
+
+.snes-dir.up {
+  top: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 31%;
+  height: 35%;
+  border-radius: 9px 9px 4px 4px;
+}
+
+.snes-dir.down {
+  bottom: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 31%;
+  height: 35%;
+  border-radius: 4px 4px 9px 9px;
+}
+
+.snes-dir.left {
+  left: 4%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 35%;
+  height: 31%;
+  border-radius: 9px 4px 4px 9px;
+}
+
+.snes-dir.right {
+  right: 4%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 35%;
+  height: 31%;
+  border-radius: 4px 9px 9px 4px;
+}
+
+.snes-cross-pivot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26%;
+  height: 26%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #334155 20%, #0f172a 100%);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.snes-dir:active,
+.snes-dir.pressed {
+  background: linear-gradient(145deg, #38bdf8, #0284c7);
+  color: #ffffff;
+  border-color: #bae6fd;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.8);
+}
+
+/* Diamante de Botões Coloridos Super Famicom / SNES (X, Y, A, B) + 6-Botões */
+.snes-diamond {
+  position: relative;
+  width: min(166px, 35vw);
+  height: min(166px, 35vw);
+  border-radius: 50%;
+  background: radial-gradient(circle, #525866 0%, #3b404c 100%);
+  border: 2.5px solid rgba(226, 232, 240, 0.42);
+  box-shadow:
+    inset 0 3px 12px rgba(0, 0, 0, 0.65),
+    0 2px 6px rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* Trilhos inclinados cinza-claros autênticos do controle Super Nintendo para os pares (X,Y) e (A,B) */
+.snes-pair-track {
+  position: absolute;
+  width: 74%;
+  height: 33%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #b8bec8 0%, #9da4b0 100%);
+  border: 1.5px solid rgba(51, 65, 85, 0.45);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.35);
+  transform: rotate(-45deg);
+  pointer-events: none;
+}
+
+.snes-pair-track.track-xy {
+  top: 18.25%;
+  left: -2.25%;
+}
+
+.snes-pair-track.track-ab {
+  bottom: 18.25%;
+  right: -2.25%;
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-pair-track,
+.snes-controller-shell[data-skin="megadrive"] .snes-pair-track {
+  display: none;
+}
+
+.snes-face-btn {
+  position: absolute;
+  z-index: 2;
+  width: 31%;
+  height: 31%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.48);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 5px 12px rgba(0, 0, 0, 0.65),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.snes-face-btn .btn-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.snes-face-btn.btn-x {
+  top: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 35% 30%, #3b82f6, #1d4ed8);
+}
+
+.snes-face-btn.btn-y {
+  left: 4%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: radial-gradient(circle at 35% 30%, #22c55e, #15803d);
+}
+
+.snes-face-btn.btn-a {
+  right: 4%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: radial-gradient(circle at 35% 30%, #ef4444, #b91c1c);
+}
+
+.snes-face-btn.btn-b {
+  bottom: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 35% 30%, #facc15, #ca8a04);
+  color: #111827;
+}
+
+/* Botões Z e C ocultos no modo 4 botões (SNES), visíveis no modo 6 botões (Arcade / Mega Drive) */
+.extra-6btn {
+  display: none;
+}
+
+/* Variante SNES US (Roxo / Lilás) */
+.snes-controller-shell[data-skin="snes_us"] .snes-face-btn.btn-x,
+.snes-controller-shell[data-skin="snes_us"] .snes-face-btn.btn-y {
+  background: radial-gradient(circle at 35% 30%, #c4b5fd, #8b5cf6);
+  color: #1e1b4b;
+}
+
+.snes-controller-shell[data-skin="snes_us"] .snes-face-btn.btn-a,
+.snes-controller-shell[data-skin="snes_us"] .snes-face-btn.btn-b {
+  background: radial-gradient(circle at 35% 30%, #7c3aed, #4c1d95);
+  color: #ffffff;
+}
+
+/* Layout de 6 Botões (Arcade Fliperama & Sega Mega Drive): Fileira Superior X, Y, Z e Inferior A, B, C */
+.snes-controller-shell[data-skin="mame"] .extra-6btn,
+.snes-controller-shell[data-skin="megadrive"] .extra-6btn {
+  display: flex;
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-face-btn,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn {
+  width: 25%;
+  height: 25%;
+  font-size: 13px;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  transform: none;
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-face-btn.btn-x,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-x {
+  top: 19%;
+  left: 8%;
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-face-btn.btn-y,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-y {
+  top: 19%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-face-btn.btn-z,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-z {
+  top: 19%;
+  right: 8%;
+  background: radial-gradient(circle at 35% 30%, #a855f7, #6b21a8);
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-face-btn.btn-a,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-a {
+  bottom: 19%;
+  left: 8%;
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-face-btn.btn-b,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-b {
+  bottom: 19%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.snes-controller-shell[data-skin="mame"] .snes-face-btn.btn-c,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-c {
+  bottom: 19%;
+  right: 8%;
+  background: radial-gradient(circle at 35% 30%, #f97316, #c2410c);
+}
+
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-x,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-y,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-z {
+  background: radial-gradient(circle at 35% 30%, #94a3b8, #475569);
+  color: #0f172a;
+}
+
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-a,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-b,
+.snes-controller-shell[data-skin="megadrive"] .snes-face-btn.btn-c {
+  background: radial-gradient(circle at 35% 30%, #334155, #0f172a);
+  color: #f8fafc;
+}
+
+/* Ajuste responsivo em retrato para garantir 0px de corte ou sobreposição */
+@media (max-width: 560px) {
+  body:not(.gamepad-fullscreen-landscape) .snes-controller-shell {
+    grid-template-columns: 1fr 0.88fr 1fr;
+    padding: 8px 6px;
+    gap: 4px;
+    border-radius: 32px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-brand-header {
+    width: 100%;
+    max-width: 100%;
+    padding: 3px 3px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-brand-title {
+    font-size: 7.2px;
+    letter-spacing: 0.2px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-brand-sub {
+    font-size: 5.4px;
+    letter-spacing: 0;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-cross,
+  body:not(.gamepad-fullscreen-landscape) .snes-diamond {
+    width: min(116px, 29.5vw);
+    height: min(116px, 29.5vw);
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-dir {
+    font-size: 13.5px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-photo-showcase {
+    max-height: 68px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-face-btn {
+    font-size: 13.5px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-controller-shell[data-skin="mame"] .snes-face-btn,
+  body:not(.gamepad-fullscreen-landscape) .snes-controller-shell[data-skin="megadrive"] .snes-face-btn {
+    font-size: 10.5px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-slanted-pills {
+    gap: 4px;
+    width: 100%;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-slanted-btn {
+    width: 34px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-slanted-btn .slanted-bar {
+    width: 24px;
+    height: 9px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .snes-slanted-btn .slanted-label {
+    font-size: 6.8px;
+  }
+}
+
+.snes-face-btn:active,
+.snes-face-btn.pressed {
+  filter: brightness(1.3);
+  box-shadow: 0 0 20px currentColor;
+}
+
+/* Barra Central Inferior: COIN (Ficha MAME), SELECT, START, MENU */
+.snes-center-deck {
+  display: grid;
+  grid-template-columns: 1.18fr 0.76fr 0.76fr 1.3fr;
+  gap: 5px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.arcade-coin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(250, 204, 21, 0.65);
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(202, 138, 4, 0.45));
+  color: #fef08a;
+  font-size: 9.2px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.snes-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(180deg, #334155, #1e293b);
+  color: #f1f5f9;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.snes-pill-btn.start-pill {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: linear-gradient(180deg, #dc2626, #991b1b);
+}
+
+.arcade-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 9.2px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.gamepad-quick-consoles {
+  display: grid;
+  grid-template-columns: 0.72fr 0.95fr 1.19fr 1.13fr 1.01fr;
+  align-items: center;
+  gap: 3.5px;
+  flex-shrink: 0;
+}
+
+.gamepad-quick-consoles.rom-filter-bar {
+  grid-template-columns: 0.76fr 0.70fr 1.44fr 1.10fr;
+  gap: 4px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+.gp-console-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 32px;
+  min-width: 0;
+  padding: 0 2px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 8.6px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gamepad-quick-consoles.rom-filter-bar .gp-console-btn {
+  font-size: 9.5px;
+  gap: 2.5px;
+  padding: 0 3px;
+  letter-spacing: -0.2px;
+}
+
+.gp-console-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--accent-tv);
+  color: #e0f2fe;
+}
+
+.gp-console-btn.snes {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.gp-console-btn.mame {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.gp-console-btn.lemuroid {
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+/* ==================== MODO FULL SCREEN LANDSCAPE DO CONTROLE ==================== */
+body.gamepad-fullscreen-landscape .topbar,
+body.gamepad-fullscreen-landscape .quick-launch-strip,
+body.gamepad-fullscreen-landscape .keyboard-bar,
+body.gamepad-fullscreen-landscape .games-subtabs,
+body.gamepad-fullscreen-landscape .gamepad-topbar,
+body.gamepad-fullscreen-landscape .snes-center-deck,
+body.gamepad-fullscreen-landscape .gamepad-quick-consoles {
+  display: none !important;
+}
+
+body.gamepad-fullscreen-landscape .app-shell {
+  max-width: none;
+  width: 100dvw;
+  height: 100dvh;
+  padding: 0;
+  margin: 0;
+}
+
+body.gamepad-fullscreen-landscape #gamesPadContainer {
+  position: fixed;
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+  z-index: 9500;
+  background: radial-gradient(circle at center, #111827 0%, #06080f 100%);
+  padding: 6px 14px 8px;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 5px;
+  overflow: hidden;
+}
+
+/* Fallback automático de rotação 90° caso o celular esteja com trava de rotação vertical (Portrait) */
+@media (orientation: portrait) {
+  body.gamepad-fullscreen-landscape #gamesPadContainer,
+  body.gamepad-fullscreen-landscape #moreControllersModal {
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    width: 100dvh;
+    height: 100dvw;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+  body.gamepad-fullscreen-landscape #gamesPadContainer {
+    padding: 6px 12px 8px;
+  }
+}
+
+body.gamepad-fullscreen-landscape .gamepad-top-hud {
+  padding: 4px 8px;
+  gap: 6px;
+  border-color: rgba(250, 204, 21, 0.65);
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+}
+
+body.gamepad-fullscreen-landscape .gp-top-hud-btn {
+  height: 32px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+body.gamepad-fullscreen-landscape .controller-quick-strip {
+  padding-bottom: 0;
+  gap: 5px;
+}
+
+body.gamepad-fullscreen-landscape .ctrl-skin-chip {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 10.5px;
+}
+
+body.gamepad-fullscreen-landscape .snes-shoulder-row {
+  gap: 6px;
+}
+
+body.gamepad-fullscreen-landscape .shoulder-btn {
+  height: 31px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+body.gamepad-fullscreen-landscape .turbo-toggle-btn {
+  height: 31px;
+  padding: 0 4px;
+  font-size: 10.5px;
+}
+
+body.gamepad-fullscreen-landscape .snes-controller-shell {
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  border-radius: 52px;
+  padding: 8px 18px;
+  grid-template-columns: 1.05fr 0.95fr 1.05fr;
+}
+
+body.gamepad-fullscreen-landscape .snes-photo-showcase {
+  max-height: 150px;
+}
+
+body.gamepad-fullscreen-landscape .snes-cross,
+body.gamepad-fullscreen-landscape .snes-diamond {
+  width: min(188px, 47dvh, 47dvw);
+  height: min(188px, 47dvh, 47dvw);
+}
+
+body.gamepad-fullscreen-landscape #moreControllersModal {
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+}
+
+body.gamepad-fullscreen-landscape .controllers-modal-sheet {
+  max-width: 780px;
+  max-height: min(92dvh, 92dvw);
+  border-radius: 18px;
+}
+
+/* ==================== MODAL MAIS CONTROLES, FOTOS & MULTIPLAYER ==================== */
+#moreControllersModal {
+  z-index: 10050;
+}
+
+.controllers-modal-sheet {
+  max-width: 620px;
+  max-height: 88dvh;
+}
+
+.controller-skins-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 440px) {
+  body:not(.gamepad-fullscreen-landscape) .controller-skins-gallery {
+    grid-template-columns: 1fr;
+  }
+}
+
+.controller-skin-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: 14px;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--border-subtle);
+  overflow: hidden;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.controller-skin-card.active {
+  border-color: #f59e0b;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.28);
+}
+
+.skin-card-photo {
+  width: 100%;
+  height: 104px;
+  object-fit: contain;
+  object-position: center;
+  padding: 4px;
+  background: #090b10;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.skin-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  flex: 1;
+}
+
+.skin-card-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.skin-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  flex: 1;
+}
+
+.skin-apply-btn {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.add-controller-box {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--bg-panel);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+.add-controller-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.add-controller-row > select,
+.add-controller-row > input,
+.add-controller-row > button {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+}
+
+.new-ctrl-name-input {
+  background: #090d16;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 0 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.add-ctrl-submit-btn {
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.multiplayer-wifi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--bg-panel);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.mp-wifi-info {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+
+/* ==================== ABA 2: CONSOLES & ROMS ==================== */
+.games-banner {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 12px;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.bt-banner {
+  border-color: rgba(59, 130, 246, 0.42);
+}
+
+.emulators-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.emu-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+.emu-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.emu-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+
+.emu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 26px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.emu-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.emu-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.emu-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.emu-badge.not-installed {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.emu-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.emu-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.emu-btn.play {
+  background: linear-gradient(135deg, #ea580c, #dc2626);
+  border-color: rgba(251, 146, 60, 0.55);
+}
+
+.emu-btn.install {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.rom-upload-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+.rom-upload-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rom-upload-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.rom-system-select {
+  background: #090d16;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rom-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.rom-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+
+.rom-item-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rom-item-title {
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.25;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rom-item-sub {
+  font-size: 11px;
+  line-height: 1.2;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rom-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.rom-play-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(234, 88, 12, 0.25);
+  color: #fed7aa;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.web-emulator-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: #05070c;
+  border: 1.5px solid #f59e0b;
+}
+
+.web-emu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fde68a;
+}
+
+.emulatorjs-host {
+  width: 100%;
+  height: 300px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000000;
+}
+
+/* ==================== ABA 3: CONTROLES BLUETOOTH ==================== */
+.bt-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bt-primary-btn {
+  background: linear-gradient(135deg, #2563eb, #0284c7) !important;
+  border-color: rgba(96, 165, 250, 0.6) !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+}
+
+.bt-active-gamepads {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(22, 163, 74, 0.18);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #bbf7d0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ==================== TERMINAL SSH & ATUALIZAÇÃO WI-FI ==================== */
+.ssh-chip {
+  border-color: rgba(6, 182, 212, 0.55);
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(37, 99, 235, 0.25));
+  color: #cffafe;
+}
+
+.ssh-connection-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(6, 182, 212, 0.38);
+  flex-shrink: 0;
+}
+
+.ssh-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ssh-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.8px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #86efac;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 8px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(14, 165, 233, 0.18);
+  color: #bae6fd;
+  font-size: 9.6px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ssh-cmd-box {
+  background: #060911;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  color: #67e8f9;
+  overflow-x: auto;
+  white-space: nowrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.ssh-action-row {
+  display: grid;
+  grid-template-columns: 1.48fr 1fr;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.ssh-action-row .proj-btn {
+  min-height: 36px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 5px !important;
+  font-size: 9.2px !important;
+  letter-spacing: -0.25px;
+  gap: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ssh-sync-btn {
+  background: linear-gradient(135deg, #0891b2, #2563eb) !important;
+  border-color: rgba(34, 211, 238, 0.55) !important;
+}
+
+.ssh-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ssh-target-select {
+  background: #090d16;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ssh-quick-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ssh-quick-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.ssh-chip-cmd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ssh-terminal-output {
+  flex: 1;
+  min-height: 150px;
+  background: #05080f;
+  border: 1.5px solid rgba(6, 182, 212, 0.32);
+  border-radius: 13px;
+  padding: 10px;
+  font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #e2e8f0;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.term-line {
+  margin-bottom: 5px;
+}
+
+.term-line.system {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.term-line.info {
+  color: #94a3b8;
+}
+
+.term-line.cmd {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.term-line.err {
+  color: #f87171;
+}
+
+.ssh-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(6, 182, 212, 0.45);
+  border-radius: 12px;
+  padding: 5px 7px;
+  flex-shrink: 0;
+}
+
+.ssh-prompt-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  color: #4ade80;
+  padding-left: 4px;
+}
+
+.ssh-input-bar input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  background: #060911;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #f8fafc;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ==================== LAYOUT RESPONSIVO PAISAGEM (LANDSCAPE 844x390) ==================== */
+@media (orientation: landscape) and (max-height: 500px) {
+  body:not(.gamepad-fullscreen-landscape) .app-shell {
+    max-width: 820px;
+    padding: 5px 12px 6px;
+    gap: 4px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .topbar {
+    padding: 3px 6px;
+    border-radius: 12px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .status-pill,
+  body:not(.gamepad-fullscreen-landscape) .mode-switcher,
+  body:not(.gamepad-fullscreen-landscape) .top-actions .icon-btn {
+    height: 28px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .top-actions .icon-btn {
+    width: 28px;
+    font-size: 13px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .quick-launch-strip {
+    padding-bottom: 0;
+    gap: 5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .quick-chip {
+    height: 24px;
+    font-size: 11px;
+    padding: 0 10px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .view-panel {
+    gap: 4px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .subview-tabs {
+    padding: 2px;
+    border-radius: 10px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .subtab-btn {
+    height: 24px;
+    font-size: 10.5px;
+  }
+
+  /* TV Box em Paisagem: D-Pad Circular à esquerda + Navegação e Mídia à direita */
+  body:not(.gamepad-fullscreen-landscape) .dpad-stage {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 18px;
+    row-gap: 8px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .dpad-wheel {
+    grid-row: 1 / 3;
+    grid-column: 1;
+    width: min(198px, 50dvh);
+    height: min(198px, 50dvh);
+    flex-shrink: 0;
+    margin: 0;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .nav-row {
+    grid-row: 1;
+    grid-column: 2;
+    align-self: end;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .nav-pill {
+    height: 48px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .media-deck {
+    grid-row: 2;
+    grid-column: 2;
+    align-self: start;
+    gap: 6px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .deck-btn {
+    height: 38px;
+  }
+
+  /* Linux Trackpad em Paisagem */
+  body:not(.gamepad-fullscreen-landscape) .trackpad-watermark {
+    padding: 6px 12px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .watermark-icon {
+    font-size: 20px;
+    margin-bottom: 2px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .watermark-title {
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .watermark-subtitle {
+    font-size: 10px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .linux-macro-bar {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .macro-btn {
+    height: 28px;
+    font-size: 10.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .mouse-buttons-bar {
+    height: 36px;
+  }
+
+  /* Linux SSH em Paisagem */
+  body:not(.gamepad-fullscreen-landscape) #linuxSshContainer {
+    gap: 4px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-connection-card {
+    padding: 5px 10px;
+    gap: 4px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-copy-btn {
+    height: 22px;
+    font-size: 9.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-cmd-box {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-action-row .proj-btn {
+    height: 26px;
+    min-height: 26px;
+    font-size: 10px !important;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-toolbar {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-target-select {
+    width: 240px;
+    height: 26px;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-chip-cmd {
+    height: 26px;
+    font-size: 10px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-terminal-output {
+    min-height: 48px;
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-input-bar {
+    padding: 3px 6px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ssh-prompt-label,
+  body:not(.gamepad-fullscreen-landscape) .ssh-input-bar input,
+  body:not(.gamepad-fullscreen-landscape) .ssh-input-bar .kbd-action-btn {
+    height: 26px;
+    font-size: 11.5px;
+  }
+
+  /* Games Pad em Paisagem Normal (sem trava fullscreen) */
+  body:not(.gamepad-fullscreen-landscape) #gamesPadContainer {
+    gap: 3px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .gamepad-top-hud {
+    padding: 2px 5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .gp-top-hud-btn {
+    height: 22px;
+    font-size: 9.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .gamepad-topbar {
+    padding: 2px 6px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .photo-mode-pill,
+  body:not(.gamepad-fullscreen-landscape) .bt-gamepad-pill {
+    height: 20px;
+    font-size: 9.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .ctrl-skin-chip {
+    height: 20px;
+    font-size: 9.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .shoulder-btn,
+  body:not(.gamepad-fullscreen-landscape) .turbo-toggle-btn {
+    height: 22px;
+    font-size: 10px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-controller-shell {
+    min-height: 96px;
+    padding: 4px 12px;
+    border-radius: 28px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-cross,
+  body:not(.gamepad-fullscreen-landscape) .snes-diamond {
+    width: min(92px, 24dvh);
+    height: min(92px, 24dvh);
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-dir,
+  body:not(.gamepad-fullscreen-landscape) .snes-face-btn {
+    font-size: 11px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-controller-shell[data-skin="mame"] .snes-face-btn,
+  body:not(.gamepad-fullscreen-landscape) .snes-controller-shell[data-skin="megadrive"] .snes-face-btn {
+    font-size: 9px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-brand-header {
+    padding: 1px 6px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-brand-title {
+    font-size: 7.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-brand-sub {
+    font-size: 5.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-photo-showcase {
+    min-height: 26px;
+    max-height: 38px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-slanted-btn .slanted-bar {
+    width: 22px;
+    height: 7px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .snes-slanted-btn .slanted-label {
+    font-size: 6.5px;
+  }
+
+  body:not(.gamepad-fullscreen-landscape) .arcade-coin-btn,
+  body:not(.gamepad-fullscreen-landscape) .snes-pill-btn,
+  body:not(.gamepad-fullscreen-landscape) .arcade-menu-btn,
+  body:not(.gamepad-fullscreen-landscape) #gamesPadContainer .gp-console-btn {
+    height: 20px;
+    font-size: 8.5px;
+  }
+}
+
+/* ==================== TELAS ULTRA-ESTREITAS (<=345px, ex: Galaxy Fold 320px) ==================== */
+@media (max-width: 345px) {
+  .status-pill {
+    max-width: 48px;
+    padding: 0 4px;
+    font-size: 8px;
+    gap: 2.5px;
+  }
+  .mode-btn {
+    font-size: 8px;
+    gap: 1px;
+    padding: 0 1px;
+  }
+  .mode-icon {
+    width: 10px;
+    height: 10px;
+    font-size: 9.5px;
+  }
+  .top-actions .icon-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 11.5px;
+  }
+  .shoulder-btn,
+  .turbo-toggle-btn,
+  .arcade-coin-btn,
+  .snes-pill-btn,
+  .arcade-menu-btn {
+    font-size: 8.8px;
+    padding: 0 3px;
+    gap: 2px;
+  }
+  .games-subtabs .subtab-btn {
+    font-size: 8.5px;
+    padding: 0 2px;
+    gap: 2px;
+  }
+  body:not(.gamepad-fullscreen-landscape) .gp-top-hud-btn {
+    font-size: 8.8px;
+    padding: 0 2px;
+    gap: 2px;
+  }
+  .gp-console-btn {
+    font-size: 7.4px;
+    padding: 0 1px;
+    gap: 1px;
+  }
+  .gamepad-quick-consoles.rom-filter-bar .gp-console-btn {
+    font-size: 8.2px;
+    padding: 0 2px;
+    gap: 1.5px;
+  }
+  .ssh-action-row .proj-btn {
+    font-size: 8px !important;
+    padding: 0 3px !important;
+  }
+}
+
+/* ==================== GALERIA VISUAL LIMPA DE CAPAS DE JOGOS (SWITCH / NETFLIX / ARCADE FRONTEND) ==================== */
+.rom-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 17px;
+  padding: 0 5px;
+  margin-left: 3px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.22);
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  color: #e0f2fe;
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.gp-top-hud-btn.choose-game-btn {
+  background: linear-gradient(135deg, #059669, #047857);
+  border-color: rgba(110, 231, 183, 0.65);
+  color: #ecfdf5;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.28);
+}
+
+.photo-mode-pill.catalog-pill {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(5, 150, 105, 0.24);
+  color: #a7f3d0;
+}
+
+#activeConsoleBadgeBtn {
+  cursor: pointer;
+}
+
+#gamesConsolesContainer > * {
+  flex-shrink: 0;
+}
+
+.rom-gallery-card {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.96) 0%, rgba(11, 15, 25, 0.98) 100%);
+  border: 1.5px solid rgba(56, 189, 248, 0.28);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.rom-gallery-toolbar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.rom-gallery-toolbar.compact {
+  gap: 6px;
+}
+
+.rom-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: rgba(9, 11, 16, 0.9);
+  border: 1.5px solid rgba(148, 163, 184, 0.32);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rom-search-box:focus-within {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+}
+
+.rom-search-icon {
+  font-size: 13px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.rom-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f8fafc;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.rom-search-input::placeholder {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.rom-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rom-filter-pills {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 480px) {
+  .rom-filter-pills {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.rom-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(148, 163, 184, 0.26);
+  background: rgba(30, 41, 59, 0.65);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.14s ease;
+}
+
+.rom-filter-pill.active {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(37, 99, 235, 0.32));
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.25);
+}
+
+.rom-filter-pill.mame.active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.32), rgba(217, 119, 6, 0.36));
+  border-color: #f59e0b;
+  color: #fef3c7;
+}
+
+.rom-filter-pill.snes.active {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(185, 28, 28, 0.34));
+  border-color: #f87171;
+  color: #fee2e2;
+}
+
+.rom-filter-pill.megadrive.active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.32), rgba(29, 78, 216, 0.36));
+  border-color: #60a5fa;
+  color: #dbeafe;
+}
+
+.rom-cover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(154px, 1fr));
+  grid-auto-rows: max-content;
+  align-items: stretch;
+  gap: 10px;
+  padding: 2px 2px 6px;
+}
+
+@media (max-width: 420px) {
+  .rom-cover-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+.rom-cover-card {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #161f33 0%, #0d1322 100%);
+  border: 1.5px solid rgba(148, 163, 184, 0.24);
+  overflow: hidden;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.42);
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rom-cover-card:hover,
+.rom-cover-card:active {
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.65);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.6);
+}
+
+.rom-cover-art-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: #090d16;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.rom-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.rom-cover-card:hover .rom-cover-img {
+  transform: scale(1.03);
+}
+
+.rom-cover-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, rgba(9, 13, 22, 0.25) 0%, rgba(9, 13, 22, 0.65) 100%);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.rom-cover-art-wrap:hover .rom-cover-play-overlay,
+.rom-cover-art-wrap:active .rom-cover-play-overlay {
+  opacity: 1;
+}
+
+.rom-cover-play-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.95);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 900;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+
+.rom-cover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 9px 6px;
+  flex: 1;
+}
+
+.rom-cover-title {
+  font-size: 12.5px;
+  font-weight: 900;
+  color: #f8fafc;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rom-cover-subtitle {
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rom-cover-genre-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.rom-cover-genre-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  color: #bae6fd;
+  font-size: 9.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rom-cover-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 8px;
+}
+
+.rom-play-primary-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 1px solid rgba(110, 231, 183, 0.55);
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rom-play-primary-btn:active {
+  transform: scale(0.96);
+}
+
+.rom-play-web-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 7px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.85);
+  color: #cbd5e1;
+  font-size: 10.5px;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ==================== GAVETA RÁPIDA DE CAPAS DENTRO DO CONTROLE (#hudGameDrawer) ==================== */
+.hud-game-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(4, 7, 15, 0.86);
+  backdrop-filter: blur(8px);
+}
+
+.hud-game-drawer.hidden {
+  display: none !important;
+}
+
+.hud-game-drawer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(860px, 96%);
+  height: 92%;
+  max-height: 92%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #131c31 0%, #090d18 100%);
+  border: 1.5px solid rgba(52, 211, 153, 0.5);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+
+body.gamepad-fullscreen-landscape .hud-game-drawer-card {
+  gap: 6px;
+  height: 95%;
+  max-height: 95%;
+  padding: 8px 12px;
+}
+
+.hud-game-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.hud-drawer-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.hud-drawer-title {
+  font-size: 14px;
+  font-weight: 900;
+  color: #ecfdf5;
+}
+
+.hud-drawer-subtitle {
+  font-size: 10.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud-drawer-grid {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+}
+
+/* ==================== XIAOMI BATTERY & OFFLINE RECOVERY BANNER (v21) ==================== */
+.status-battery-pill.charging,
+.battery-pill.charging {
+  background: rgba(6, 78, 59, 0.45);
+  border-color: rgba(52, 211, 153, 0.65);
+  color: #6ee7b7;
+}
+
+.status-battery-pill.low,
+.battery-pill.low {
+  background: rgba(120, 53, 15, 0.55);
+  border-color: rgba(251, 191, 36, 0.75);
+  color: #fde68a;
+}
+
+.status-battery-pill.critical,
+.status-battery-pill.offline,
+.battery-pill.critical,
+.battery-pill.offline {
+  background: rgba(127, 29, 29, 0.65);
+  border-color: rgba(248, 113, 113, 0.85);
+  color: #fecaca;
+  animation: pulseBatteryAlert 1.6s infinite ease-in-out;
+}
+
+@keyframes pulseBatteryAlert {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+  50% { transform: scale(1.03); box-shadow: 0 0 10px 2px rgba(239, 68, 68, 0.45); }
+}
+
+.offline-recovery-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(69, 10, 10, 0.92) 0%, rgba(15, 23, 42, 0.96) 100%);
+  border: 1.5px solid rgba(248, 113, 113, 0.68);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+  flex-shrink: 0;
+}
+
+.offline-recovery-banner.low-battery-mode {
+  background: linear-gradient(135deg, rgba(120, 53, 15, 0.92) 0%, rgba(15, 23, 42, 0.96) 100%);
+  border-color: rgba(251, 191, 36, 0.75);
+}
+
+.offline-banner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.offline-banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.offline-banner-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #fef2f2;
+  line-height: 1.3;
+}
+
+.offline-banner-desc {
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.35;
+}
+
+.offline-close-btn {
+  width: 26px !important;
+  height: 26px !important;
+  font-size: 12px !important;
+  flex-shrink: 0;
+}
+
+.offline-banner-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.offline-revive-btn,
+.offline-guide-btn {
+  min-height: 36px !important;
+  padding: 6px 10px !important;
+  font-size: 11.5px !important;
+}
+
+.offline-guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(9, 13, 24, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.offline-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #e2e8f0;
+}
+
+.offline-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.22);
+  border: 1px solid rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  font-size: 10.5px;
+  font-weight: 900;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+
+

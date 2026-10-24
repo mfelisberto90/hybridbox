@@ -1,0 +1,226 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ==============================================================================
+# HybridBox Smart Passwordless `sudo` Wrapper for Termux + XFCE4 + Debian PRoot
+# ==============================================================================
+# Enables standard Linux `sudo` workflows on unrooted Android devices running
+# HybridBox (Termux + Termux:X11 + XFCE4 + Debian proot-distro + ADB Shell Bridge):
+#   1. `sudo apt update && sudo apt install -y <app>` -> Installs apps seamlessly
+#      via Termux `apt`/`pkg` (or Debian `proot-distro` if not in Termux repos).
+#   2. `sudo -i` / `sudo -s` / `sudo su` -> Opens a root shell (Debian PRoot if
+#      installed, or `termux-chroot` fake-root environment).
+#   3. `sudo pm / am / settings / cmd / svc / dumpsys / setprop ...` -> Executes
+#      with privileged Android `uid=2000 (shell)` permissions via `hb-shell`.
+#   4. `sudo <command>` -> Runs the command directly or inside Debian PRoot with
+#      DISPLAY=:0 and PulseAudio attached so GUI Linux apps open on the TV/Projector!
+# ==============================================================================
+
+export PREFIX=/data/data/com.termux/files/usr
+export HOME=/data/data/com.termux/files/home
+export PATH=$PREFIX/bin:/system/bin:/system/xbin
+export LD_LIBRARY_PATH=$PREFIX/lib
+export DISPLAY=${DISPLAY:-:0}
+export PULSE_SERVER=${PULSE_SERVER:-127.0.0.1}
+
+if [ $# -eq 0 ]; then
+  echo "usage: sudo [-i | -s | -v | -V] <command> [args...]"
+  exit 0
+fi
+
+# Parse leading sudo flags (-E, -n, -S, -H, -u <user>, -s, -i, -v, -V, -k, -l, -h, --)
+INTERACTIVE_ROOT=0
+VALIDATE_ONLY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -V|--version)
+      echo "Sudo version 1.9.15p5 (HybridBox Passwordless Wrapper for Termux + Debian PRoot + Android Shell)"
+      exit 0
+      ;;
+    -h|--help)
+      echo "usage: sudo [-i | -s | -v | -V | -l] <command> [args...]"
+      echo "HybridBox passwordless sudo wrapper (Termux + Debian PRoot + Android uid=2000 bridge)."
+      exit 0
+      ;;
+    -l|--list)
+      echo "User $(id -un 2>/dev/null || echo termux) may run the following commands on HybridBox:"
+      echo "    (ALL : ALL) NOPASSWD: ALL"
+      exit 0
+      ;;
+    -v|--validate|-k|--reset-timestamp|-K|--remove-timestamp)
+      VALIDATE_ONLY=1
+      shift
+      ;;
+    -i|-s)
+      INTERACTIVE_ROOT=1
+      shift
+      ;;
+    -u|-g|-C|-D|-R|-T|-U|-p|-r|-t)
+      shift 2 2>/dev/null || shift
+      ;;
+    -E|-n|-S|-H|-P|-A|-b|-e|-H)
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+# If only `-v`, `-k`, or `-K` was passed with no command, exit 0 immediately
+if [ "$VALIDATE_ONLY" = "1" ] && [ $# -eq 0 ] && [ "$INTERACTIVE_ROOT" = "0" ]; then
+  exit 0
+fi
+
+# Interactive root shell: `sudo -i`, `sudo -s`, `sudo su`, `sudo bash`
+if [ -d "$PREFIX/var/lib/proot-distro/containers/debian/rootfs" ]; then
+  DEBIAN_ROOTFS="$PREFIX/var/lib/proot-distro/containers/debian/rootfs"
+else
+  DEBIAN_ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
+fi
+has_debian_proot() {
+  command -v proot-distro >/dev/null 2>&1 && [ -d "$DEBIAN_ROOTFS" ]
+}
+
+if [ "$INTERACTIVE_ROOT" = "1" ] || [ "$1" = "su" ]; then
+  if [ "$1" = "su" ]; then
+    shift
+  fi
+  if [ $# -eq 0 ]; then
+    if has_debian_proot; then
+      exec proot-distro login debian --shared-tmp -- env DISPLAY="$DISPLAY" PULSE_SERVER="$PULSE_SERVER" bash -l
+    elif command -v termux-chroot >/dev/null 2>&1; then
+      exec termux-chroot bash
+    else
+      exec "$PREFIX/bin/bash"
+    fi
+  fi
+fi
+
+if [ $# -eq 0 ]; then
+  exit 0
+fi
+
+CMD="$1"
+shift
+
+# Case 1: Package management (`sudo apt ...`, `sudo apt-get ...`, `sudo pkg ...`, `sudo dpkg ...`)
+if [ "$CMD" = "apt" ] || [ "$CMD" = "apt-get" ] || [ "$CMD" = "pkg" ]; then
+  # Find the subcommand (ignoring leading flags like -y, -q, --yes)
+  SUBCMD=""
+  for arg in "$@"; do
+    case "$arg" in
+      -*) ;;
+      *) SUBCMD="$arg"; break ;;
+    esac
+  done
+
+  if [ "$SUBCMD" = "update" ]; then
+    "$PREFIX/bin/apt" "$@"
+    RC=$?
+    if has_debian_proot; then
+      proot-distro login debian --shared-tmp -- env DEBIAN_FRONTEND=noninteractive apt-get update >/dev/null 2>&1 || true
+    fi
+    exit $RC
+  fi
+
+  if [ "$SUBCMD" = "install" ] || [ "$SUBCMD" = "remove" ] || [ "$SUBCMD" = "purge" ] || [ "$SUBCMD" = "upgrade" ] || [ "$SUBCMD" = "dist-upgrade" ] || [ "$SUBCMD" = "full-upgrade" ] || [ "$SUBCMD" = "search" ] || [ "$SUBCMD" = "show" ] || [ "$SUBCMD" = "autoremove" ]; then
+    if "$PREFIX/bin/apt" "$@"; then
+      exit 0
+    fi
+    # Fallback to Debian PRoot if package is a standard Debian desktop/CLI package not in Termux native repos
+    if has_debian_proot; then
+      echo "[HybridBox sudo] Package not in Termux native repo; installing via Debian PRoot..."
+      if [ -z "$(ls -A "$DEBIAN_ROOTFS/var/lib/apt/lists" 2>/dev/null)" ]; then
+        proot-distro login debian --shared-tmp -- env DEBIAN_FRONTEND=noninteractive apt-get update
+      fi
+      proot-distro login debian --shared-tmp -- env DEBIAN_FRONTEND=noninteractive apt-get "$@"
+      RC=$?
+      if [ $RC -eq 0 ] && [ "$SUBCMD" = "install" ]; then
+        # Create lightweight launcher shims in $PREFIX/bin for newly requested packages if present in Debian /usr/bin
+        for pkg_arg in "$@"; do
+          case "$pkg_arg" in
+            -*|install) ;;
+            *)
+              if [ ! -e "$PREFIX/bin/$pkg_arg" ] && [ -x "$DEBIAN_ROOTFS/usr/bin/$pkg_arg" ]; then
+                cat <<SHIM > "$PREFIX/bin/$pkg_arg"
+#!/data/data/com.termux/files/usr/bin/bash
+exec proot-distro login debian --shared-tmp -- env DISPLAY="\${DISPLAY:-:0}" PULSE_SERVER="\${PULSE_SERVER:-127.0.0.1}" MOZ_DISABLE_CONTENT_SANDBOX=1 "$pkg_arg" "\$@"
+SHIM
+                chmod 755 "$PREFIX/bin/$pkg_arg" 2>/dev/null || true
+              fi
+              ;;
+          esac
+        done
+      fi
+      exit $RC
+    fi
+    exit 1
+  fi
+
+  if [ "$CMD" = "pkg" ] && [ -x "$PREFIX/bin/pkg" ]; then
+    exec "$PREFIX/bin/pkg" "$@"
+  fi
+  exec "$PREFIX/bin/apt" "$@"
+fi
+
+if [ "$CMD" = "dpkg" ]; then
+  if "$PREFIX/bin/dpkg" "$@"; then
+    exit 0
+  elif has_debian_proot; then
+    exec proot-distro login debian --shared-tmp -- env DEBIAN_FRONTEND=noninteractive dpkg "$@"
+  fi
+  exit 1
+fi
+
+# Case 2: Android system/privileged commands -> execute via `hb-shell` (uid=2000 shell)
+case "$CMD" in
+  pm|am|cmd|settings|svc|dumpsys|setprop|getprop|input|wm|appops|device_config|screencap|screenrecord)
+    if [ -x "$PREFIX/bin/hb-shell" ]; then
+      exec "$PREFIX/bin/hb-shell" "$CMD $*"
+    fi
+    exec "/system/bin/$CMD" "$@"
+    ;;
+esac
+
+# Case 2b: Root identity checks (`sudo whoami`, `sudo id`, `sudo id -u`)
+if [ "$CMD" = "whoami" ]; then
+  echo "root"
+  exit 0
+fi
+
+if [ "$CMD" = "id" ]; then
+  if [ "$1" = "-u" ] || [ "$1" = "-g" ]; then
+    echo "0"
+    exit 0
+  elif [ "$1" = "-un" ] || [ "$1" = "-nu" ] || [ "$1" = "-gn" ] || [ "$1" = "-ng" ]; then
+    echo "root"
+    exit 0
+  elif [ $# -eq 0 ]; then
+    echo "uid=0(root) gid=0(root) groups=0(root),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),3001(net_bt_admin),3002(net_bt),3003(inet)"
+    exit 0
+  elif command -v proot >/dev/null 2>&1; then
+    exec proot -0 id "$@"
+  fi
+fi
+
+# Case 3: Standard Linux command present in Termux
+if command -v "$CMD" >/dev/null 2>&1; then
+  if command -v proot >/dev/null 2>&1; then
+    exec proot -0 "$CMD" "$@"
+  fi
+  exec "$CMD" "$@"
+fi
+
+# Case 4: Command installed inside Debian PRoot
+if has_debian_proot; then
+  exec proot-distro login debian --shared-tmp -- env DISPLAY="$DISPLAY" PULSE_SERVER="$PULSE_SERVER" MOZ_DISABLE_CONTENT_SANDBOX=1 "$CMD" "$@"
+fi
+
+echo "sudo: $CMD: command not found (Tip: install it with 'sudo apt install $CMD')" >&2
+exit 127

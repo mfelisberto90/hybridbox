@@ -1,0 +1,728 @@
+"""
+Servidor Principal FastAPI + WebSockets do HybridBox Remote PWA.
+Hospeda o PWA instalável e roteia comandos de controle remoto / trackpad / teclado
+com latência zero entre Android TV Box (ADB Loopback) e Linux Desktop (Termux:X11).
+"""
+
+import base64
+import json
+import os
+import socket
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Set
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from backend.android_controller import AndroidController
+from backend.app_registry import ANDROID_APPS, LINUX_APPS, get_all_apps
+from backend.bluetooth_gaming_controller import BluetoothGamingController
+from backend.projector_controller import ProjectorController
+from backend.ssh_terminal_controller import SshTerminalController
+from backend.wifi_portable_controller import WifiPortableController
+from backend.x11_controller import X11Controller
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+ROMS_DIR = BASE_DIR / "roms"
+ROMS_DIR.mkdir(parents=True, exist_ok=True)
+
+app = FastAPI(
+    title="HybridBox Remote PWA",
+    description="Controle Remoto Híbrido (Android TV Box + Linux XFCE4 Desktop) para Redmi Note 8 Pro",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def get_local_ip() -> str:
+    """Descobre o IP da rede Wi-Fi local para exibir no painel/terminal (mesmo sem internet)."""
+    try:
+        from backend.wifi_portable_controller import MdnsZeroConfService
+
+        ip = MdnsZeroConfService.get_local_bind_ip()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+
+
+class HybridBoxState:
+    def __init__(self) -> None:
+        self.mode: str = "tv"  # "tv", "linux" ou "games"
+        self.android = AndroidController(adb_serial="127.0.0.1:5555")
+        self.x11 = X11Controller(display_name=":0", android_controller=self.android)
+        self.projector = ProjectorController(self.android)
+        self.wifi = WifiPortableController(self.android, BASE_DIR)
+        self.gaming = BluetoothGamingController(self.android, BASE_DIR)
+        self.ssh_terminal = SshTerminalController(self.android, BASE_DIR)
+        self.clients: Set[WebSocket] = set()
+
+
+state = HybridBoxState()
+
+
+class ModeRequest(BaseModel):
+    mode: str
+
+
+class LaunchRequest(BaseModel):
+    app_id: str
+
+
+class ProjectorConnectRequest(BaseModel):
+    target: str = ""
+    target_name: str = ""
+    auto_connect: bool = True
+
+
+class ProjectorDisplayModeRequest(BaseModel):
+    mode: str = "clone"
+
+
+class DlnaCastRequest(BaseModel):
+    control_url: str
+    media_url: str
+
+
+class WifiConnectRequest(BaseModel):
+    ssid: str
+    password: str = ""
+    security: str = "wpa2"
+    save_only: bool = False
+
+
+class WifiRescueHotspotRequest(BaseModel):
+    ssid: str = "HybridBox"
+    password: str = "hybridbox123"
+    security: str = "wpa2"
+    auto_connect: bool = True
+    connect_now: bool = False
+
+
+class BluetoothScanRequest(BaseModel):
+    open_rarely_used: bool = False
+
+
+class BluetoothPairRequest(BaseModel):
+    target: str = ""
+
+
+class EmulatorActionRequest(BaseModel):
+    emulator_id: str
+
+
+class RomUploadRequest(BaseModel):
+    system: str = "snes"
+    filename: str
+    data_base64: str
+
+
+class RomPackInstallRequest(BaseModel):
+    pack_id: str = "all"
+
+
+class RomLaunchRequest(BaseModel):
+    system: str = "snes"
+    filename: str
+
+
+class ControllerManageRequest(BaseModel):
+    action: str = "select"  # "select" | "add" | "remove"
+    controller_id: str = ""
+    skin_id: str = "snes"
+    player: int = 1
+    name: str = ""
+
+
+class SshExecRequest(BaseModel):
+    command: str
+    target: str = "android"
+
+
+async def broadcast_state() -> None:
+    """Notifica todos os smartphones conectados sobre mudança de modo e bateria."""
+    bat = state.android.get_battery_and_health()
+    payload = json.dumps(
+        {
+            "type": "state",
+            "mode": state.mode,
+            "x11_backend": state.x11.backend_name,
+            "android_backend": state.android.backend_name,
+            "phone_online": bat.get("phone_online", True),
+            "battery": bat,
+        }
+    )
+    dead: List[WebSocket] = []
+    for ws in state.clients:
+        try:
+            await ws.send_text(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        state.clients.discard(ws)
+
+
+def apply_mode_switch(target_mode: str) -> str:
+    """Alterna entre Android TV Box, Linux Desktop (Termux:X11) e Console de Games."""
+    normalized = target_mode.strip().lower()
+    if normalized not in ("tv", "linux", "games"):
+        raise ValueError("Modo inválido. Use 'tv', 'linux' ou 'games'.")
+
+    state.mode = normalized
+    if normalized == "linux":
+        state.android.switch_to_linux_desktop()
+    elif normalized == "games":
+        state.android.switch_to_games_hub()
+    else:
+        state.android.switch_to_tv_box()
+    return state.mode
+
+
+def execute_app_launch(app_id: str) -> Dict[str, Any]:
+    """Abre um aplicativo do catálogo Android TV, Linux Desktop ou Games."""
+    if app_id in ANDROID_APPS:
+        app_info = ANDROID_APPS[app_id]
+        if app_id == "displaylink":
+            res = state.projector.open_hdmi_displaylink()
+            return {
+                "ok": True,
+                "launched": app_info["name"],
+                "mode": state.mode,
+                "message": res.get("message", ""),
+            }
+        if app_info["category"] == "games":
+            state.gaming.ensure_rom_directories_and_permissions()
+            emu_sys_map = {
+                "snes9x": "snes",
+                "neoemu": "mame",
+                "mame4droid": "mame4droid",
+                "mdemu": "megadrive",
+                "lemuroid": "lemuroid",
+            }
+            if app_id in emu_sys_map:
+                state.android.active_emulator = emu_sys_map[app_id]
+        state.android.run_fallback_chain(app_info["commands"])
+        if app_id == "termux_x11":
+            state.mode = "linux"
+        elif app_info["category"] == "games":
+            state.mode = "games"
+        elif app_info["category"] == "tv":
+            state.mode = "tv"
+        return {"ok": True, "launched": app_info["name"], "mode": state.mode}
+
+    if app_id in LINUX_APPS:
+        app_info = LINUX_APPS[app_id]
+        state.mode = "linux"
+        state.android.switch_to_linux_desktop()
+        state.x11.launch_linux_command(app_info["command"])
+        return {"ok": True, "launched": app_info["name"], "mode": state.mode}
+
+    raise KeyError(f"Aplicativo '{app_id}' não encontrado.")
+
+
+@app.get("/api/status")
+async def api_status() -> JSONResponse:
+    bat = state.android.get_battery_and_health()
+    return JSONResponse(
+        {
+            "ok": True,
+            "mode": state.mode,
+            "ip": get_local_ip(),
+            "phone_ip": state.wifi.get_best_phone_ip(),
+            "mdns_url": "http://hybridbox.local:8080",
+            "x11_backend": state.x11.backend_name,
+            "android_backend": state.android.backend_name,
+            "phone_online": bat.get("phone_online", True),
+            "battery": bat,
+            "apps": get_all_apps(),
+        }
+    )
+
+
+@app.get("/api/battery")
+async def api_battery(force: bool = False) -> JSONResponse:
+    bat = state.android.get_battery_and_health(force=force)
+    return JSONResponse({"ok": True, "battery": bat})
+
+
+@app.post("/api/system/revive")
+async def api_system_revive() -> JSONResponse:
+    res = state.android.revive_phone_connection()
+    await broadcast_state()
+    return JSONResponse(res)
+
+
+@app.post("/api/mode")
+async def api_set_mode(req: ModeRequest) -> JSONResponse:
+    try:
+        new_mode = apply_mode_switch(req.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await broadcast_state()
+    return JSONResponse({"ok": True, "mode": new_mode})
+
+
+@app.post("/api/launch")
+async def api_launch(req: LaunchRequest) -> JSONResponse:
+    try:
+        result = execute_app_launch(req.app_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    await broadcast_state()
+    return JSONResponse(result)
+
+
+@app.get("/api/projector/status")
+async def api_projector_status() -> JSONResponse:
+    status = state.projector.parse_miracast_status()
+    return JSONResponse(
+        {
+            "ok": True,
+            "wfd_enabled": status["wfd_enabled"],
+            "scanning": status["scanning"],
+            "active_display": status["active_display"],
+            "display_mode": status.get("display_mode"),
+            "projector_ip": status.get("projector_ip"),
+            "devices": status["miracast_devices"],
+        }
+    )
+
+
+@app.post("/api/projector/scan")
+async def api_projector_scan(req: ProjectorConnectRequest) -> JSONResponse:
+    res = state.projector.scan_and_open_cast(auto_connect=req.auto_connect)
+    return JSONResponse(res)
+
+
+@app.post("/api/projector/connect")
+async def api_projector_connect(req: ProjectorConnectRequest) -> JSONResponse:
+    query = (req.target_name or req.target or "").strip()
+    res = state.projector.connect_device(target_query=query)
+    return JSONResponse(res)
+
+
+@app.post("/api/projector/display-mode")
+async def api_projector_display_mode(req: ProjectorDisplayModeRequest) -> JSONResponse:
+    res = state.projector.set_windows_display_mode(req.mode)
+    return JSONResponse(res)
+
+
+@app.post("/api/projector/wake-phone")
+async def api_projector_wake_phone() -> JSONResponse:
+    res = state.projector.wake_phone_screen(bring_to_front=True)
+    return JSONResponse(res)
+
+
+@app.post("/api/projector/locate-ip")
+async def api_projector_locate_ip() -> JSONResponse:
+    lan_dev = state.projector.discover_projector_network_device(deep_scan=True)
+    status = state.projector.parse_miracast_status(deep_scan_ip=False)
+    ip_found = (lan_dev or {}).get("ip") or status.get("projector_ip")
+    return JSONResponse(
+        {
+            "ok": bool(ip_found),
+            "projector_ip": ip_found,
+            "device": lan_dev,
+            "devices": status.get("miracast_devices", []),
+            "message": (
+                f"📍 Projector automatically located on Wi-Fi LAN at IP {ip_found}!"
+                if ip_found
+                else "⚠️ Projector did not respond on the Wi-Fi subnet."
+            ),
+        }
+    )
+
+
+@app.post("/api/projector/miui-cast")
+async def api_projector_miui_cast() -> JSONResponse:
+    res = state.projector.open_miui_cast_with_screen_off()
+    return JSONResponse(res)
+
+
+@app.post("/api/projector/windows-cast")
+async def api_projector_windows_cast() -> JSONResponse:
+    res = state.projector.open_windows_wireless_display()
+    return JSONResponse(res)
+
+
+@app.post("/api/projector/hdmi")
+async def api_projector_hdmi() -> JSONResponse:
+    res = state.projector.open_hdmi_displaylink()
+    return JSONResponse(res)
+
+
+@app.post("/api/projector/dlna-cast")
+async def api_projector_dlna_cast(req: DlnaCastRequest) -> JSONResponse:
+    res = state.projector.send_dlna_media_url(req.control_url, req.media_url)
+    return JSONResponse(res)
+
+
+# ==================== ENDPOINTS WI-FI PORTÁTIL & HOTSPOT DE RESGATE ====================
+
+
+@app.get("/api/wifi/status")
+async def api_wifi_status() -> JSONResponse:
+    res = state.wifi.get_wifi_status()
+    return JSONResponse(res)
+
+
+@app.get("/api/wifi/scan")
+@app.post("/api/wifi/scan")
+async def api_wifi_scan() -> JSONResponse:
+    res = state.wifi.scan_wifi_networks()
+    return JSONResponse(res)
+
+
+@app.post("/api/wifi/connect")
+async def api_wifi_connect(req: WifiConnectRequest) -> JSONResponse:
+    res = state.wifi.connect_wifi_network(
+        ssid=req.ssid,
+        password=req.password,
+        security=req.security,
+        save_only=req.save_only,
+    )
+    return JSONResponse(res)
+
+
+@app.get("/api/wifi/rescue-hotspot")
+async def api_wifi_rescue_hotspot_get() -> JSONResponse:
+    status = state.wifi.get_wifi_status()
+    return JSONResponse(
+        {
+            "ok": True,
+            "rescue_hotspot": status.get("rescue_hotspot"),
+            "mdns_url": status.get("mdns_url"),
+            "ip": status.get("ip"),
+        }
+    )
+
+
+@app.post("/api/wifi/rescue-hotspot")
+async def api_wifi_rescue_hotspot_set(req: WifiRescueHotspotRequest) -> JSONResponse:
+    res = state.wifi.configure_rescue_hotspot(
+        ssid=req.ssid,
+        password=req.password,
+        security=req.security,
+        auto_connect=req.auto_connect,
+        connect_now=req.connect_now,
+    )
+    return JSONResponse(res)
+
+
+
+# ==================== ENDPOINTS SESSÃO GAMES & BLUETOOTH ====================
+
+
+@app.get("/api/games/status")
+async def api_games_status() -> JSONResponse:
+    res = state.gaming.get_games_status()
+    return JSONResponse(res)
+
+
+@app.post("/api/games/launch")
+async def api_games_launch(req: EmulatorActionRequest) -> JSONResponse:
+    res = state.gaming.launch_emulator(req.emulator_id)
+    if res.get("ok"):
+        state.mode = "games"
+        await broadcast_state()
+    return JSONResponse(res)
+
+
+@app.post("/api/games/install")
+async def api_games_install(req: EmulatorActionRequest) -> JSONResponse:
+    res = state.gaming.install_emulator(req.emulator_id)
+    return JSONResponse(res)
+
+
+@app.post("/api/games/upload-rom")
+async def api_games_upload_rom(req: RomUploadRequest) -> JSONResponse:
+    try:
+        raw_b64 = req.data_base64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        content = base64.b64decode(raw_b64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Base64 inválido: {exc}") from exc
+
+    res = state.gaming.save_and_push_rom(req.system, req.filename, content)
+    return JSONResponse(res)
+
+
+@app.post("/api/games/install-pack")
+async def api_games_install_pack(req: RomPackInstallRequest) -> JSONResponse:
+    res = state.gaming.install_rom_pack(req.pack_id)
+    return JSONResponse(res)
+
+
+@app.post("/api/games/launch-rom")
+async def api_games_launch_rom(req: RomLaunchRequest) -> JSONResponse:
+    res = state.gaming.launch_rom(req.system, req.filename)
+    if res.get("ok"):
+        state.mode = "games"
+        await broadcast_state()
+    return JSONResponse(res)
+
+
+@app.get("/api/games/controllers")
+async def api_games_controllers_get() -> JSONResponse:
+    host_label = os.environ.get("HYBRIDBOX_PUBLIC_HOST", "hybridbox.local")
+    res = state.gaming.get_controllers_config(host_ip=host_label)
+    return JSONResponse(res)
+
+
+@app.post("/api/games/controllers")
+async def api_games_controllers_manage(req: ControllerManageRequest) -> JSONResponse:
+    host_label = os.environ.get("HYBRIDBOX_PUBLIC_HOST", "hybridbox.local")
+    res = state.gaming.manage_controllers(
+        action=req.action,
+        payload={
+            "controller_id": req.controller_id,
+            "skin_id": req.skin_id,
+            "player": req.player,
+            "name": req.name,
+        },
+        host_ip=host_label,
+    )
+    return JSONResponse(res)
+
+
+@app.get("/api/bluetooth/status")
+async def api_bluetooth_status() -> JSONResponse:
+    res = state.gaming.get_bluetooth_status()
+    return JSONResponse(res)
+
+
+@app.post("/api/bluetooth/scan")
+async def api_bluetooth_scan(req: BluetoothScanRequest) -> JSONResponse:
+    res = state.gaming.scan_bluetooth_devices(open_rarely_used=req.open_rarely_used)
+    return JSONResponse(res)
+
+
+@app.post("/api/bluetooth/pair")
+async def api_bluetooth_pair(req: BluetoothPairRequest) -> JSONResponse:
+    res = state.gaming.pair_or_connect_device(req.target)
+    return JSONResponse(res)
+
+
+# ==================== ENDPOINTS TERMINAL SSH & ATUALIZAÇÃO WI-FI ====================
+
+
+@app.get("/api/ssh/status")
+async def api_ssh_status() -> JSONResponse:
+    res = state.ssh_terminal.get_ssh_status()
+    return JSONResponse(res)
+
+
+@app.post("/api/ssh/exec")
+async def api_ssh_exec(req: SshExecRequest) -> JSONResponse:
+    res = state.ssh_terminal.execute_command(req.command, target=req.target)
+    return JSONResponse(res)
+
+
+@app.post("/api/ssh/sync-wifi")
+async def api_ssh_sync_wifi() -> JSONResponse:
+    res = state.ssh_terminal.sync_update_over_wifi()
+    return JSONResponse(res)
+
+
+@app.post("/api/ssh/open-laptop")
+async def api_ssh_open_laptop() -> JSONResponse:
+    res = state.ssh_terminal.open_laptop_ssh_terminal()
+    return JSONResponse(res)
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket) -> None:
+    await ws.accept()
+    state.clients.add(ws)
+    try:
+        bat = state.android.get_battery_and_health()
+        await ws.send_text(
+            json.dumps(
+                {
+                    "type": "state",
+                    "mode": state.mode,
+                    "x11_backend": state.x11.backend_name,
+                    "android_backend": state.android.backend_name,
+                    "phone_online": bat.get("phone_online", True),
+                    "battery": bat,
+                }
+            )
+        )
+        while True:
+            raw = await ws.receive_text()
+            msg = json.loads(raw)
+            msg_type = msg.get("type")
+
+            if msg_type == "ping":
+                bat_now = state.android.get_battery_and_health()
+                await ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "pong",
+                            "ts": msg.get("ts", time.time()),
+                            "phone_online": bat_now.get("phone_online", True),
+                            "battery": bat_now,
+                        }
+                    )
+                )
+                continue
+
+            if msg_type == "mode":
+                target = msg.get("mode", "tv")
+                apply_mode_switch(target)
+                await broadcast_state()
+                continue
+
+            if msg_type == "launch":
+                app_id = msg.get("app_id", "")
+                if app_id:
+                    execute_app_launch(app_id)
+                    await broadcast_state()
+                continue
+
+            # Roteamento inteligente de eventos de acordo com o modo ativo (ou override explícito)
+            target_mode = msg.get("target") or state.mode
+
+            if msg_type == "move":
+                dx = float(msg.get("dx", 0.0))
+                dy = float(msg.get("dy", 0.0))
+                if target_mode == "linux":
+                    state.x11.move_relative(dx, dy)
+                else:
+                    state.android.move_cursor(dx, dy)
+
+            elif msg_type == "click":
+                button = int(msg.get("button", 1))
+                count = int(msg.get("count", 1))
+                if target_mode == "linux":
+                    state.x11.click(button=button, count=count)
+                else:
+                    state.android.tap_current(button=button)
+
+            elif msg_type == "mousedown":
+                button = int(msg.get("button", 1))
+                if target_mode == "linux":
+                    state.x11.mouse_button(button=button, down=True)
+
+            elif msg_type == "mouseup":
+                button = int(msg.get("button", 1))
+                if target_mode == "linux":
+                    state.x11.mouse_button(button=button, down=False)
+
+            elif msg_type == "scroll":
+                dx = float(msg.get("dx", 0.0))
+                dy = float(msg.get("dy", 0.0))
+                if target_mode == "linux":
+                    state.x11.scroll(dx=dx, dy=dy)
+                else:
+                    state.android.scroll(dx=dx, dy=dy)
+
+            elif msg_type == "dpad":
+                # D-Pad e teclas de mídia sempre funcionam no Android TV;
+                # no modo Games acionam o D-Pad do emulador; no Linux Desktop convertem setas/Enter/Esc
+                key = str(msg.get("key", ""))
+                if key in ("VOL_UP", "VOL_DOWN", "MUTE", "PLAY_PAUSE", "PREV", "NEXT"):
+                    state.android.send_key(key)
+                elif target_mode == "games" and key in ("UP", "DOWN", "LEFT", "RIGHT", "OK"):
+                    state.android.send_gamepad_key(key)
+                elif target_mode == "linux":
+                    linux_dpad_map = {
+                        "UP": "Up",
+                        "DOWN": "Down",
+                        "LEFT": "Left",
+                        "RIGHT": "Right",
+                        "OK": "Return",
+                        "BACK": "Escape",
+                        "HOME": "Super_L",
+                    }
+                    state.x11.send_key(linux_dpad_map.get(key, key))
+                else:
+                    state.android.send_key(key)
+
+            elif msg_type == "gamepad":
+                key = str(msg.get("key", ""))
+                player = int(msg.get("player", 1) or 1)
+                style = str(msg.get("style", "") or "")
+                if key:
+                    state.android.send_gamepad_key(
+                        key, player=player, style=style or None
+                    )
+
+            elif msg_type == "key":
+                key = str(msg.get("key", ""))
+                if target_mode == "linux":
+                    state.x11.send_key(key)
+                else:
+                    state.android.send_key(key)
+
+            elif msg_type == "text":
+                text = str(msg.get("text", ""))
+                if target_mode == "linux":
+                    state.x11.send_text(text)
+                else:
+                    state.android.send_text(text)
+
+    except WebSocketDisconnect:
+        state.clients.discard(ws)
+    except Exception:
+        state.clients.discard(ws)
+
+
+# Rotas de raiz para PWA (manifest.json, sw.js, index.html)
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
+@app.get("/manifest.json")
+async def serve_manifest() -> FileResponse:
+    return FileResponse(
+        FRONTEND_DIR / "manifest.json",
+        media_type="application/manifest+json",
+        headers=NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/sw.js")
+async def serve_sw() -> FileResponse:
+    return FileResponse(
+        FRONTEND_DIR / "sw.js",
+        media_type="application/javascript",
+        headers=NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/")
+async def serve_index() -> FileResponse:
+    return FileResponse(
+        FRONTEND_DIR / "index.html",
+        media_type="text/html",
+        headers=NO_CACHE_HEADERS,
+    )
+
+
+app.mount("/roms", StaticFiles(directory=str(ROMS_DIR)), name="roms")
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
