@@ -144,15 +144,24 @@ while true; do
   if ! pgrep -f "[t]ermux.x11" >/dev/null 2>&1; then
     nohup termux-x11 :0 -ac </dev/null >/dev/null 2>&1 &
   fi
-  DISPLAY=:0 "$PREFIX/bin/python3" "$PROJECT_DIR/scripts/shield_x11_touch.py" >/dev/null 2>&1 || true
+  # Executa shield_x11_touch.py apenas no 1º ciclo, a cada 30 ciclos (~2 min) ou se o daemon do kernel cair
+  if [ "$LOOP_COUNT" -eq 1 ] || [ $((LOOP_COUNT % 30)) -eq 0 ] || ! pgrep -f "[g]rab_ghost_touch" >/dev/null 2>&1; then
+    DISPLAY=:0 "$PREFIX/bin/python3" "$PROJECT_DIR/scripts/shield_x11_touch.py" >/dev/null 2>&1 || true
+  fi
 
-  # E. A cada ciclo (~4s): Keepalive ativo no Gateway + Vizinhos ARP da LAN (impede MediaTek WMM-PS sleep e mantém ARP vivo nos celulares da rede)
+  # E. A cada ciclo (~4s): Keepalive ativo no Gateway; Vizinhos ARP apenas a cada 8 ciclos (~32s)
   termux-wake-lock 2>/dev/null || true
-  pkill -9 -f "[u]powerd" 2>/dev/null || true
-  pkill -9 -f "[x]fce4-power-manager" 2>/dev/null || true
-  pkill -9 -f "[t]ermux-api BatteryStatus" 2>/dev/null || true
+  if [ $((LOOP_COUNT % 15)) -eq 0 ]; then
+    pkill -9 -f "[u]powerd" 2>/dev/null || true
+    pkill -9 -f "[x]fce4-power-manager" 2>/dev/null || true
+    pkill -9 -f "[t]ermux-api BatteryStatus" 2>/dev/null || true
+  fi
   if [ -x "$PREFIX/bin/hb-shell" ]; then
-    "$PREFIX/bin/hb-shell" "if ip -4 addr show wlan0 2>/dev/null | grep -q 'inet '; then GW=\$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print \$3; exit}'); [ -z \"\$GW\" ] && GW='192.168.0.1'; /system/bin/ping -c 1 -W 1 \"\$GW\" >/dev/null 2>&1 & for peer in \$(ip -4 neigh show dev wlan0 2>/dev/null | awk '{print \$1}'); do /system/bin/ping -c 1 -W 1 \"\$peer\" >/dev/null 2>&1 & done; else RESCUE_SSID='HybridBox'; RESCUE_PASS='hybridbox123'; RESCUE_SEC='wpa2'; RESCUE_ENABLED='1'; [ -f /data/local/tmp/hb_rescue_wifi.conf ] && . /data/local/tmp/hb_rescue_wifi.conf 2>/dev/null; if [ \"\$RESCUE_ENABLED\" = '1' ] && [ -n \"\$RESCUE_SSID\" ]; then svc wifi enable 2>/dev/null; cmd wifi set-wifi-enabled enabled 2>/dev/null; cmd wifi set-scan-always-available enabled 2>/dev/null; cmd wifi start-scan >/dev/null 2>&1; if cmd wifi list-scan-results 2>/dev/null | grep -qF \"\$RESCUE_SSID\"; then if [ \"\$RESCUE_SEC\" = 'open' ] || [ -z \"\$RESCUE_PASS\" ]; then cmd wifi connect-network \"\$RESCUE_SSID\" open >/dev/null 2>&1; else cmd wifi connect-network \"\$RESCUE_SSID\" \"\$RESCUE_SEC\" \"\$RESCUE_PASS\" >/dev/null 2>&1; fi; fi; fi; fi" >/dev/null 2>&1 || true
+    if [ $((LOOP_COUNT % 8)) -eq 0 ]; then
+      "$PREFIX/bin/hb-shell" "if ip -4 addr show wlan0 2>/dev/null | grep -q 'inet '; then GW=\$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print \$3; exit}'); [ -z \"\$GW\" ] && GW='192.168.0.1'; /system/bin/ping -c 1 -W 1 \"\$GW\" >/dev/null 2>&1 & for peer in \$(ip -4 neigh show dev wlan0 2>/dev/null | awk '{print \$1}'); do /system/bin/ping -c 1 -W 1 \"\$peer\" >/dev/null 2>&1 & done; else RESCUE_SSID='HybridBox'; RESCUE_PASS='hybridbox123'; RESCUE_SEC='wpa2'; RESCUE_ENABLED='1'; [ -f /data/local/tmp/hb_rescue_wifi.conf ] && . /data/local/tmp/hb_rescue_wifi.conf 2>/dev/null; if [ \"\$RESCUE_ENABLED\" = '1' ] && [ -n \"\$RESCUE_SSID\" ]; then svc wifi enable 2>/dev/null; cmd wifi set-wifi-enabled enabled 2>/dev/null; cmd wifi set-scan-always-available enabled 2>/dev/null; cmd wifi start-scan >/dev/null 2>&1; if cmd wifi list-scan-results 2>/dev/null | grep -qF \"\$RESCUE_SSID\"; then if [ \"\$RESCUE_SEC\" = 'open' ] || [ -z \"\$RESCUE_PASS\" ]; then cmd wifi connect-network \"\$RESCUE_SSID\" open >/dev/null 2>&1; else cmd wifi connect-network \"\$RESCUE_SSID\" \"\$RESCUE_SEC\" \"\$RESCUE_PASS\" >/dev/null 2>&1; fi; fi; fi; fi" >/dev/null 2>&1 || true
+    else
+      "$PREFIX/bin/hb-shell" "GW=\$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print \$3; exit}'); [ -z \"\$GW\" ] && GW='192.168.0.1'; /system/bin/ping -c 1 -W 1 \"\$GW\" >/dev/null 2>&1 &" >/dev/null 2>&1 || true
+    fi
   else
     GW_IP=$(ip -4 route show table all 2>/dev/null | awk '/default via .* dev wlan0/ {print $3; exit}')
     [ -z "$GW_IP" ] && GW_IP="192.168.0.1"
