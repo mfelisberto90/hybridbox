@@ -395,7 +395,7 @@ async def api_system_memory() -> JSONResponse:
 
 
 @app.post("/api/system/cache/clear")
-async def api_system_cache/clear() -> JSONResponse:
+async def api_system_cache_clear() -> JSONResponse:
     """Limpa o cache em memória e dispara ciclo manual de higienização do Janitor."""
     state.cache.clear()
     clean_stats = await asyncio.to_thread(state.janitor.run_clean_cycle)

@@ -144,9 +144,16 @@ class TestHybridBoxSuite(unittest.TestCase):
     def test_ssh_key_injection_and_non_self_killing_restart_patterns(self) -> None:
         from scripts import pc_usb_autorevive
 
-        with mock.patch("subprocess.run") as mock_run:
-            pc_usb_autorevive._ensure_pc_ssh_key_on_phone("adb", "serial123")
-            if mock_run.called:
+        with tempfile.TemporaryDirectory() as tmp_home:
+            ssh_dir = Path(tmp_home) / ".ssh"
+            ssh_dir.mkdir(parents=True, exist_ok=True)
+            (ssh_dir / "id_ed25519.pub").write_text(
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestFixtureKeyOnly hybridbox@test\n",
+                encoding="utf-8",
+            )
+            with mock.patch("pathlib.Path.home", return_value=Path(tmp_home)), mock.patch("subprocess.run") as mock_run:
+                pc_usb_autorevive._ensure_pc_ssh_key_on_phone("adb", "serial123")
+                self.assertTrue(mock_run.called)
                 adb_shell_cmd = " ".join(str(x) for x in mock_run.call_args[0][0])
                 self.assertIn("HOME=/data/data/com.termux/files/home", adb_shell_cmd)
                 self.assertIn("/data/data/com.termux/files/home/.ssh/authorized_keys", adb_shell_cmd)
