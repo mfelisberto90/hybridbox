@@ -1,0 +1,52 @@
+name: CI — Zero-Leak Security, Syntax & Unit Test Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Secret Scan, C/JS/Python Syntax & Zero-Leak Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Secret Scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate Python Bytecode, Native C Input Shield & PWA JS Syntax
+        run: |
+          find backend scripts tests -name "*.py" -exec python3 -m py_compile {} +
+          gcc -Wall -Wextra -fsyntax-only scripts/grab_ghost_touch.c
+          node --check frontend/app.js
+          node --check frontend/sw.js
+
+      - name: Run Automated Unit & Zero-Leak Privacy Suite
+        run: PYTHONPATH=. python3 -m unittest tests/test_hybridbox.py -v
